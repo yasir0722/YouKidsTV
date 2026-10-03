@@ -12,10 +12,11 @@ browsing journey:
 3. Selecting "Watch trailer" opens a full-screen player with transport
    controls.
 
-The current catalogue is not YouKids content. It is a local, hard-coded list
-of five Android TV sample videos that is repeated and shuffled across six
-placeholder categories. Card and backdrop images are downloaded with Glide;
-video playback uses Leanback's `MediaPlayerAdapter`.
+The catalogue is being connected to the Laravel backend in
+`/Users/techqesb/Dev/telegram-video-library`. The app reads the public
+read-only feed for the configured Telegram `link` topic. YouTube entries open
+in a WebView embed, direct MP4 URLs use Leanback playback, and Telegram uploads
+can use a short-lived backend playback URL.
 
 ## Current technical baseline
 
@@ -26,16 +27,16 @@ video playback uses Leanback's `MediaPlayerAdapter`.
 | Module structure | One `app` module; no data, domain, or UI feature modules |
 | UI | Leanback `BrowseSupportFragment`, `DetailsSupportFragment`, and `VideoSupportFragment` |
 | Navigation | Activities and intent extras: browse -> details -> playback |
-| Content source | `MovieList`, an in-memory hard-coded sample catalogue |
+| Content source | `VideoLibraryRepository`, public backend catalogue endpoint |
 | Images | Glide loading remote card and backdrop images |
-| Playback | `MediaPlayerAdapter` through `PlaybackTransportControlGlue` |
-| SDK configuration | Compile/target SDK 37, minimum SDK 36 |
-| Testing | No unit, instrumented, or UI tests are present |
+| Playback | YouTube iframe in WebView; MP4/Telegram via `MediaPlayerAdapter`; stored language, speed, quality, and subtitle preferences |
+| SDK configuration | Compile/target SDK 37, minimum SDK 23 |
+| Testing | JUnit unit tests cover catalogue ordering and related-item selection; TV UI and installer flows still need device smoke tests |
 
 ## Existing user-facing behavior
 
-- The home screen shows six named placeholder category rows and one
-  "PREFERENCES" row.
+- The home screen shows videos returned from the backend's curated `link`
+  topic feed.
 - Search and personal settings only show placeholder messages.
 - The details screen exposes Watch trailer, Rent, and Buy actions. Only Watch
   trailer launches a player; the other actions are placeholders.
@@ -52,13 +53,14 @@ video playback uses Leanback's `MediaPlayerAdapter`.
   `movie` string rather than the `DetailsActivity.MOVIE` key the destination
   reads. Opening a related item can therefore return to the home screen
   instead of its details page.
-- There is no content API, persistence layer, offline behaviour, loading
-  state, recoverable network-error state, analytics, or test coverage.
+- There is no local cache or offline behaviour. API loading and error handling
+  are being added; search, analytics, and end-to-end TV tests remain future
+  work.
 - `Movie` is sent through intents with Java serialization. Replace this with
   an ID-based route after a repository exists, rather than passing the full
   content object.
-- The minimum SDK 36 excludes most existing Android TV devices. Confirm the
-  intended device fleet before changing it; the final floor must match the
+- The minimum SDK is now 23 to support older Android TV devices. Confirm the
+  intended device fleet before release; the final floor must match the
   Android TV and Google Play distribution requirements.
 
 ## Product direction
@@ -68,6 +70,19 @@ children and families. The first usable release should let a child browse a
 curated catalogue, find a title, view age-appropriate details, and reliably
 watch an approved video. Parent-only actions and all external services must
 be designed explicitly rather than inferred from this prototype.
+
+## Selected content integration
+
+- The backend reads one configured Telegram channel/forum supergroup.
+- Only posts in its `link` topic are shown in the public YouKids catalogue.
+- Link-topic posts may contain one HTTPS YouTube URL or direct HTTPS `.mp4`
+  URL. Use the message text for the title and optional description.
+- Public access means anyone who can reach the API can view and play published
+  items from that topic. Other Telegram topic categories stay outside the
+  public feed.
+- Do not embed Telegram credentials or backend secrets in the Android app.
+- YouTube playback uses the embedded YouTube player in WebView as requested;
+  embedding may fail for videos whose owners or YouTube restrict playback.
 
 ## Delivery plan
 
@@ -90,40 +105,42 @@ contract, supported-device matrix, and privacy/safety requirements exist.
 
 ### Phase 1 — Stabilize the prototype
 
-1. Correct related-item navigation to use the same non-localized intent key
-   as browse-to-details navigation.
-2. Replace generic naming and placeholder copy with temporary YouKids
-   branding, keeping all visible text in string resources.
-3. Replace mutable global shuffling with deterministic, immutable catalogue
-   data so rows and related recommendations are reproducible.
+1. **Done:** related-item navigation now uses the clicked item and the
+   canonical intent key, matching browse-to-details navigation.
+2. **In progress:** replaced the generic browse title and watch/rent/buy demo
+   actions with YouKids/video wording.
+3. **Done:** removed in-place catalogue shuffling; IDs, category row content,
+   and related recommendations now follow deterministic catalogue order.
 4. Make intent input validation and playback failure handling explicit:
    missing/invalid media must show a recoverable screen rather than crash.
 5. Create an emulator/device smoke-test checklist for launch, browse,
    details, related navigation, playback controls, and back navigation.
-6. Add automated tests for the catalogue mapper, navigation input, and
-   playback route selection.
+6. **In progress:** added unit tests for related-item exclusion and stable
+   catalogue ordering. Still add coverage for navigation input and playback
+   route selection.
 
 **Exit criteria:** the demo is reliable on a supported Android TV emulator
 and a physical device, with no placeholder flow required to complete the
 core journey.
 
-### Phase 2 — Establish production architecture and content
+### Phase 2 — Connect Telegram topic catalogue to YouKids TV
 
-1. Introduce a repository interface and use-case layer. Keep UI models
-   separate from network/database DTOs.
-2. Implement the approved remote catalogue source with timeouts, structured
-   errors, and a local cache. Use stable content IDs for navigation.
-3. Model screen states explicitly: loading, populated, empty, offline cached,
-   and recoverable error.
-4. Build category and title detail screens from the repository, including
-   age rating, duration, captions, and availability.
-5. Implement real TV search across locally available catalogue data, then
-   extend it to server search only if required by the selected backend.
-6. Add tests for repository success, empty, cache, and error paths.
+1. **In progress:** sync one external HTTPS YouTube or MP4 link from each
+   supported message in the configured Telegram `link` topic.
+2. **In progress:** expose only published `link`-topic catalogue entries via
+   the backend's public read-only API; keep other routes authenticated.
+3. **In progress:** replace the hard-coded Android TV sample list with API
+   loading, explicit error/empty states, and stable video IDs.
+4. Play YouTube through the selected WebView embed and MP4 inside the TV
+   player; retain signed backend playback for Telegram uploads.
+5. Verify D-pad browsing, details, playback, unavailable-video behavior, and
+   back navigation on an Android TV emulator.
+6. Test Telegram URL parsing, topic filtering, public API exposure, and
+   backend playback URL scoping.
 
-**Exit criteria:** an editor can publish approved content to the selected
-source and it appears in the app without an app release; the core experience
-remains usable from cache when appropriate.
+**Exit criteria:** a link posted in the Telegram `link` topic appears in
+YouKids TV after sync, other topics do not appear in the public feed, and the
+matching YouTube or MP4 playback path works on the target TV emulator.
 
 ### Phase 3 — Build a child-safe playback experience
 
@@ -173,31 +190,57 @@ retention policy, failure state, accessibility coverage, and automated tests.
 privacy, security, and content-safety checklists, and the operating team can
 monitor and roll back the release.
 
-## Recommended first implementation slice
+## Integration workflow
 
-Start with Phase 1 and the first two Phase 2 tasks:
+Run Telegram sync after posting or editing a supported link-topic message.
+Configure `youkidsApiBaseUrl` in Gradle to the backend `/api/v1` URL. The
+default `https://afterlight.yasiraz.my/api/v1` points to the deployed backend;
+override it with `http://10.0.2.2:8080/api/v1` when using the local Docker API
+from an Android emulator.
 
-1. Fix related-item navigation and replace demo strings/data with a stable
-   local YouKids fixture.
-2. Introduce a `VideoRepository` interface backed initially by that fixture.
-3. Navigate by content ID and load each screen through the repository.
-4. Add automated tests for the browse-to-details, related-to-details, and
-   details-to-playback routes.
-5. Replace the fixture with the chosen catalogue integration once Phase 0's
-   contract is approved.
+From the TV app's Settings card, choose **Sync videos from Telegram** after
+adding or editing a link-topic post. The app asks Afterlight to run a
+rate-limited server-side sync, then reloads the catalogue on the home screen.
 
-This creates a safe migration path from the sample app to production content
-without coupling the UI to a backend or shipping unstable demo behavior.
+For tag browsing, begin a Telegram link-topic message with `title = Bing`,
+`title = Upin Ipin`, `title = Mechamato`, or another label, then put one or
+more video links in that message. After the backend is migrated and synced,
+**Explore all videos** presents the tags and opens a filtered list; **Watch on
+YouTube** remains a flat list of all YouTube videos.
+
+Playback preferences are saved on the TV and default to Malay audio where a
+track is available, 0.75× speed, preferred 1080p YouTube quality, and Malay
+subtitles. If a Malay subtitle track is unavailable, YouKids leaves captions
+off. Direct MP4/Telegram playback selects matching audio/subtitle tracks when
+the file exposes them. YouTube's embedded API does not expose audio-track
+selection, so use the YouTube player settings menu for audio tracks. YouTube
+may also limit requested speeds to its supported rates and may ignore quality
+preferences based on the video, device, or connection.
+
+## APK publishing and TV updates
+
+Build the debug APK with `:app:assembleDebug`; the artifact is
+`app/build/outputs/apk/debug/app-debug.apk`. Publish it from Afterlight
+Settings with the exact APK version name and a version code greater than the
+currently published release. The updater validates the package, version,
+file size, and SHA-256 checksum before handing the APK to Android's installer.
+
+This personal sideload build uses Android Studio's `~/.android/debug.keystore`.
+Preserve that signing key for future updates or Android will not accept them
+over the installed app. The first updater-enabled APK must be downloaded and
+installed manually. Later updates can be checked from YouKids Settings, but
+Android requires allowing installs from YouKids and confirming each update in
+the system installer.
 
 ## Decisions still required
 
-- What is the launch catalogue source and who approves children’s content?
+- Who approves and age-rates links before placing them in the public `link`
+  topic?
 - Which countries, languages, age bands, and Android TV devices are in the
   first release?
 - Are profiles and parental controls required for the first release?
 - Is viewing possible without sign-in, and is a subscription or purchase
   model in scope?
-- What media formats, captions, DRM, and offline requirements must playback
-  support?
+- What captions, DRM, and offline requirements must playback support?
 - Which privacy, consent, and analytics policies apply to children and
   parents?

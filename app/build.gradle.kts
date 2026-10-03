@@ -2,6 +2,10 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+val youkidsApiBaseUrl = providers.gradleProperty("youkidsApiBaseUrl")
+    .orElse("https://afterlight.yasiraz.my/api/v1")
+    .get()
+
 android {
     namespace = "com.example.youkids"
     compileSdk {
@@ -10,11 +14,15 @@ android {
 
     defaultConfig {
         applicationId = "com.example.youkids"
-        minSdk = 36
+        minSdk = 23
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 8
+        versionName = "1.7"
+        buildConfigField("String", "API_BASE_URL", "\"$youkidsApiBaseUrl\"")
+    }
 
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {
@@ -33,6 +41,9 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.activity)
+    implementation(libs.androidx.fragment)
     implementation(libs.androidx.leanback)
     implementation(libs.glide)
+    testImplementation(libs.junit)
 }

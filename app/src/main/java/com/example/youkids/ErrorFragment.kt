@@ -16,10 +16,10 @@ class ErrorFragment : ErrorSupportFragment() {
         title = resources.getString(R.string.app_name)
     }
 
-    internal fun setErrorContent() {
+    internal fun setErrorContent(errorMessage: String? = null) {
         imageDrawable =
             ContextCompat.getDrawable(context!!, androidx.leanback.R.drawable.lb_ic_sad_cloud)
-        message = resources.getString(R.string.error_fragment_message)
+        message = errorMessage ?: resources.getString(R.string.error_fragment_message)
         setDefaultBackground(TRANSLUCENT)
 
         buttonText = resources.getString(R.string.dismiss_error)

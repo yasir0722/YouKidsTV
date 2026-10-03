@@ -32,8 +32,6 @@ import com.bumptech.glide.Glide
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
 
-import java.util.Collections
-
 /**
  * A wrapper fragment for leanback details screens.
  * It shows a detailed view of video and its metadata plus related videos.
@@ -62,7 +60,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             mAdapter = ArrayObjectAdapter(mPresenterSelector)
             setupDetailsOverviewRow(selectedMovie)
             setupDetailsOverviewRowPresenter(selectedMovie)
-            setupRelatedMovieListRow()
+            setupRelatedMovieListRow(selectedMovie)
             adapter = mAdapter
             initializeBackground(selectedMovie)
             onItemViewClickedListener = ItemViewClickedListener(selectedMovie)
@@ -124,22 +122,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         actionAdapter.add(
             Action(
                 ACTION_WATCH_TRAILER,
-                resources.getString(R.string.watch_trailer_1),
-                resources.getString(R.string.watch_trailer_2)
-            )
-        )
-        actionAdapter.add(
-            Action(
-                ACTION_RENT,
-                resources.getString(R.string.rent_1),
-                resources.getString(R.string.rent_2)
-            )
-        )
-        actionAdapter.add(
-            Action(
-                ACTION_BUY,
-                resources.getString(R.string.buy_1),
-                resources.getString(R.string.buy_2)
+                resources.getString(R.string.watch_trailer_1)
             )
         )
         row.actionsAdapter = actionAdapter
@@ -173,14 +156,14 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         mPresenterSelector.addClassPresenter(DetailsOverviewRow::class.java, detailsPresenter)
     }
 
-    private fun setupRelatedMovieListRow() {
+    private fun setupRelatedMovieListRow(movie: Movie) {
         val subcategories = arrayOf(getString(R.string.related_movies))
-        val list = MovieList.list
+        val relatedMovies = MovieList.relatedMoviesFor(movie)
+        if (relatedMovies.isEmpty()) return
 
-        Collections.shuffle(list)
         val listRowAdapter = ArrayObjectAdapter(CardPresenter())
         for (j in 0 until NUM_COLS) {
-            listRowAdapter.add(list[j % 5])
+            listRowAdapter.add(relatedMovies[j % relatedMovies.size])
         }
 
         val header = HeaderItem(0, subcategories[0])
@@ -204,7 +187,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             if (item is Movie) {
                 Log.d(TAG, "Item: " + item.toString())
                 val intent = Intent(context!!, DetailsActivity::class.java)
-                intent.putExtra(resources.getString(R.string.movie), movie)
+                intent.putExtra(DetailsActivity.MOVIE, item)
 
                 val bundle =
                     ActivityOptionsCompat.makeSceneTransitionAnimation(
@@ -222,8 +205,6 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         private val TAG = "VideoDetailsFragment"
 
         private val ACTION_WATCH_TRAILER = 1L
-        private val ACTION_RENT = 2L
-        private val ACTION_BUY = 3L
 
         private val DETAIL_THUMB_WIDTH = 274
         private val DETAIL_THUMB_HEIGHT = 274
