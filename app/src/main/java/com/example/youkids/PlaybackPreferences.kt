@@ -29,8 +29,32 @@ class PlaybackPreferences(context: Context) {
             preferences.edit().putString(KEY_SUBTITLE_LANGUAGE, value).apply()
         }
 
+    var screenTimerMinutes: Int
+        get() = preferences.getInt(KEY_SCREEN_TIMER_MINUTES, DEFAULT_SCREEN_TIMER_MINUTES)
+        set(value) {
+            preferences.edit()
+                .putInt(KEY_SCREEN_TIMER_MINUTES, value)
+                .putLong(KEY_SCREEN_TIMER_REMAINING_MILLIS, value * MILLIS_PER_MINUTE)
+                .apply()
+        }
+
+    fun beginScreenTimerSession(): Long {
+        val savedRemainingMillis = preferences.getLong(KEY_SCREEN_TIMER_REMAINING_MILLIS, 0L)
+        if (savedRemainingMillis > 0L) return savedRemainingMillis
+        val durationMillis = screenTimerMinutes * MILLIS_PER_MINUTE
+        saveScreenTimerRemainingMillis(durationMillis)
+        return durationMillis
+    }
+
+    fun saveScreenTimerRemainingMillis(remainingMillis: Long) {
+        preferences.edit()
+            .putLong(KEY_SCREEN_TIMER_REMAINING_MILLIS, remainingMillis.coerceAtLeast(0L))
+            .apply()
+    }
+
     companion object {
         const val DEFAULT_PLAYBACK_SPEED = 0.75f
+        const val DEFAULT_SCREEN_TIMER_MINUTES = 30
         const val LANGUAGE_MALAY = "ms"
         const val LANGUAGE_ENGLISH = "en"
         const val LANGUAGE_ARABIC = "ar"
@@ -52,11 +76,15 @@ class PlaybackPreferences(context: Context) {
         )
         val videoQualities = listOf(QUALITY_1080P, QUALITY_720P, QUALITY_480P, QUALITY_AUTO)
         val subtitleLanguages = listOf(LANGUAGE_MALAY, LANGUAGE_OFF)
+        val screenTimerOptionsMinutes = listOf(5, 10, 15, 30, 45, 60)
 
         private const val PREFERENCES_NAME = "youkids_playback"
         private const val KEY_AUDIO_LANGUAGE = "audio_language"
         private const val KEY_PLAYBACK_SPEED = "playback_speed"
         private const val KEY_VIDEO_QUALITY = "video_quality"
         private const val KEY_SUBTITLE_LANGUAGE = "subtitle_language"
+        private const val KEY_SCREEN_TIMER_MINUTES = "screen_timer_minutes"
+        private const val KEY_SCREEN_TIMER_REMAINING_MILLIS = "screen_timer_remaining_millis"
+        private const val MILLIS_PER_MINUTE = 60_000L
     }
 }

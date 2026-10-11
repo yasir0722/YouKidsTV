@@ -16,8 +16,8 @@ android {
         applicationId = "com.example.youkids"
         minSdk = 23
         targetSdk = 37
-        versionCode = 8
-        versionName = "1.7"
+        versionCode = 17
+        versionName = "2.6"
         buildConfigField("String", "API_BASE_URL", "\"$youkidsApiBaseUrl\"")
     }
 
@@ -44,6 +44,7 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.fragment)
     implementation(libs.androidx.leanback)
+    implementation(libs.androidx.tvprovider)
     implementation(libs.glide)
     testImplementation(libs.junit)
 }

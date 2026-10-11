@@ -4,6 +4,7 @@ coreKtx = "1.10.1"
 activity = "1.10.1"
 fragment = "1.8.6"
 leanback = "1.2.0"
+tvprovider = "1.0.0"
 glide = "4.11.0"
 junit = "4.13.2"
 
@@ -12,6 +13,7 @@ androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = 
 androidx-activity = { group = "androidx.activity", name = "activity", version.ref = "activity" }
 androidx-fragment = { group = "androidx.fragment", name = "fragment", version.ref = "fragment" }
 androidx-leanback = { group = "androidx.leanback", name = "leanback", version.ref = "leanback" }
+androidx-tvprovider = { group = "androidx.tvprovider", name = "tvprovider", version.ref = "tvprovider" }
 glide = { group = "com.github.bumptech.glide", name = "glide", version.ref = "glide" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 

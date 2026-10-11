@@ -18,13 +18,22 @@ object MovieList {
 
     fun tagsFor(movies: List<Movie>): List<VideoTag> =
         movies.mapNotNull { movie ->
-            movie.tag?.trim()?.takeIf(String::isNotEmpty)
+            movieTags(movie).ifEmpty { null }
         }
+            .flatten()
             .groupBy { it.lowercase(Locale.ROOT) }
-            .values
-            .map { tags -> VideoTag(tags.first(), tags.size) }
+            .map { (_, tags) -> VideoTag(tags.first(), tags.size) }
             .sortedBy { it.name.lowercase(Locale.ROOT) }
 
     fun videosForTag(movies: List<Movie>, tag: String): List<Movie> =
-        movies.filter { it.tag?.trim()?.equals(tag.trim(), ignoreCase = true) == true }
+        movies.filter { movie ->
+            movieTags(movie).any { it.equals(tag.trim(), ignoreCase = true) }
+        }
+
+    private fun movieTags(movie: Movie): List<String> =
+        movie.tag
+            ?.split(',', '|', '\n')
+            ?.map { it.trim() }
+            ?.filter(String::isNotEmpty)
+            .orEmpty()
 }

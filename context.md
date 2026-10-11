@@ -54,8 +54,7 @@ can use a short-lived backend playback URL.
   reads. Opening a related item can therefore return to the home screen
   instead of its details page.
 - There is no local cache or offline behaviour. API loading and error handling
-  are being added; search, analytics, and end-to-end TV tests remain future
-  work.
+  are being added; analytics and end-to-end TV tests remain future work.
 - `Movie` is sent through intents with Java serialization. Replace this with
   an ID-based route after a repository exists, rather than passing the full
   content object.
@@ -205,17 +204,44 @@ rate-limited server-side sync, then reloads the catalogue on the home screen.
 For tag browsing, begin a Telegram link-topic message with `title = Bing`,
 `title = Upin Ipin`, `title = Mechamato`, or another label, then put one or
 more video links in that message. After the backend is migrated and synced,
-**Explore all videos** presents the tags and opens a filtered list; **Watch on
-YouTube** remains a flat list of all YouTube videos.
+**Explore all videos** presents the tags and opens a filtered list. Tag values
+may contain comma-, pipe-, or newline-separated labels; each label is shown as
+its own selectable tag. **Watch on YouTube** remains one browse tab whose
+content is arranged as up to three compact, horizontally scrollable card rows
+instead of three tabs or one long horizontal row. Focus follows the remote and
+scrolls the active row toward the selected card.
+
+The app shuffles the catalogue when it loads. This keeps the main rows,
+filtered tag lists, related videos, and the in-player alternative-video list
+from always presenting the same order. Search has been removed from the TV
+interface; the Leanback search affordance is hidden and there is no search
+dialog or search-results flow.
+
+During playback, pressing Down once shows the playback controls. Pressing Down
+again opens a focusable horizontal strip of small thumbnail cards outside the
+controls, allowing the viewer to move between alternative videos with
+Left/Right and open one with OK. Back hides the strip before leaving playback.
+The same suggestion strip opens automatically when the current video reaches
+the end, for both YouTube and direct video playback.
 
 Playback preferences are saved on the TV and default to Malay audio where a
 track is available, 0.75× speed, preferred 1080p YouTube quality, and Malay
 subtitles. If a Malay subtitle track is unavailable, YouKids leaves captions
 off. Direct MP4/Telegram playback selects matching audio/subtitle tracks when
 the file exposes them. YouTube's embedded API does not expose audio-track
-selection, so use the YouTube player settings menu for audio tracks. YouTube
-may also limit requested speeds to its supported rates and may ignore quality
-preferences based on the video, device, or connection.
+selection. YouKids also starts a 30-minute screen timer for each app session.
+The timer can be changed in Settings to 5, 10, 15, 30, 45, or 60 minutes. The
+remaining session time is shared across browsing and multiple videos, and the
+current countdown is reset immediately to the newly selected duration. The
+always-visible bar also shows the TV's current local time. When the timer
+reaches 5, 3, or 1 minute remaining, a centered circular warning shows the
+number for five seconds. When the timer expires, the current screen pauses until
+the viewer selects the correct answer to a three-choice math question with an
+answer greater than 20. The first wrong answer resets the question; a second
+wrong answer exits the app. A correct answer offers 5, 10, or 15 extra minutes.
+YouTube may also limit requested speeds to
+its supported rates and may ignore quality preferences based on the video,
+device, or connection.
 
 ## APK publishing and TV updates
 

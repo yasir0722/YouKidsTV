@@ -21,6 +21,7 @@ class AppUpdateActivity : FragmentActivity() {
     private val updateExecutor = Executors.newSingleThreadExecutor()
     private val repository by lazy { AppUpdateRepository(applicationContext) }
     private val playbackPreferences by lazy { PlaybackPreferences(applicationContext) }
+    private lateinit var screenTimerOverlay: ScreenTimerOverlay
 
     private lateinit var statusText: TextView
     private lateinit var progressBar: ProgressBar
@@ -31,6 +32,7 @@ class AppUpdateActivity : FragmentActivity() {
     private lateinit var playbackSpeedButton: Button
     private lateinit var videoQualityButton: Button
     private lateinit var subtitleLanguageButton: Button
+    private lateinit var screenTimerButton: Button
     private var availableRelease: AppReleaseInfo? = null
     private var downloadedApk: File? = null
     private var awaitingInstallPermission = false
@@ -38,15 +40,18 @@ class AppUpdateActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_app_update)
+        screenTimerOverlay = ScreenTimerOverlay(this).also(ScreenTimerOverlay::attach)
 
         audioLanguageButton = findViewById(R.id.audio_language_button)
         playbackSpeedButton = findViewById(R.id.playback_speed_button)
         videoQualityButton = findViewById(R.id.video_quality_button)
         subtitleLanguageButton = findViewById(R.id.subtitle_language_button)
+        screenTimerButton = findViewById(R.id.screen_timer_button)
         audioLanguageButton.setOnClickListener { chooseAudioLanguage() }
         playbackSpeedButton.setOnClickListener { choosePlaybackSpeed() }
         videoQualityButton.setOnClickListener { chooseVideoQuality() }
         subtitleLanguageButton.setOnClickListener { chooseSubtitleLanguage() }
+        screenTimerButton.setOnClickListener { chooseScreenTimer() }
         updatePlaybackPreferenceLabels()
 
         statusText = findViewById(R.id.app_update_status)
@@ -77,6 +82,7 @@ class AppUpdateActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        screenTimerOverlay.onResume()
         val apk = downloadedApk
         if (awaitingInstallPermission &&
             packageManager.canRequestPackageInstalls() &&
@@ -87,7 +93,13 @@ class AppUpdateActivity : FragmentActivity() {
         }
     }
 
+    override fun onPause() {
+        screenTimerOverlay.onPause()
+        super.onPause()
+    }
+
     override fun onDestroy() {
+        screenTimerOverlay.onDestroy()
         updateExecutor.shutdownNow()
         super.onDestroy()
     }
@@ -252,6 +264,20 @@ class AppUpdateActivity : FragmentActivity() {
         }
     }
 
+    private fun chooseScreenTimer() {
+        val options = PlaybackPreferences.screenTimerOptionsMinutes
+        showPreferenceChoices(
+            title = R.string.screen_timer_title,
+            labels = options.map(::screenTimerLabel),
+            selectedIndex = options.indexOf(playbackPreferences.screenTimerMinutes).coerceAtLeast(0),
+        ) { index ->
+            val minutes = options[index]
+            playbackPreferences.screenTimerMinutes = minutes
+            screenTimerOverlay.resetToMinutes(minutes)
+            updatePlaybackPreferenceLabels()
+        }
+    }
+
     private fun showPreferenceChoices(
         title: Int,
         labels: List<String>,
@@ -285,7 +311,15 @@ class AppUpdateActivity : FragmentActivity() {
             R.string.playback_subtitle_setting,
             subtitleLanguageLabel(playbackPreferences.subtitleLanguage),
         )
+        screenTimerButton.text = getString(
+            R.string.screen_timer_setting,
+            screenTimerLabel(playbackPreferences.screenTimerMinutes),
+        )
     }
+
+    private fun screenTimerLabel(minutes: Int): String =
+        if (minutes == 60) getString(R.string.screen_timer_one_hour) else
+            getString(R.string.screen_timer_minutes, minutes)
 
     private fun audioLanguageLabel(language: String): String =
         when (language) {

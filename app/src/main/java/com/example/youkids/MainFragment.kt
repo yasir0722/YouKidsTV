@@ -4,13 +4,11 @@ import java.util.Timer
 import java.util.TimerTask
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.text.InputType
 import androidx.leanback.app.BackgroundManager
 import androidx.leanback.app.BrowseSupportFragment
 import androidx.leanback.widget.ArrayObjectAdapter
@@ -29,8 +27,6 @@ import androidx.activity.OnBackPressedCallback
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.View
-import android.view.inputmethod.EditorInfo
-import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import java.io.IOException
@@ -54,9 +50,9 @@ class MainFragment : BrowseSupportFragment() {
     private var mBackgroundTimer: Timer? = null
     private var mBackgroundUri: String? = null
     private var catalogueMovies: List<Movie> = emptyList()
-    private var currentSearchQuery = ""
     private var selectedTag: String? = null
     private var tagBackCallback: OnBackPressedCallback? = null
+    var homeVideoId: Long? = null
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         Log.i(TAG, "onCreate")
@@ -95,8 +91,11 @@ class MainFragment : BrowseSupportFragment() {
 
         // set fastLane (or headers) background color
         brandColor = ContextCompat.getColor(context!!, R.color.fastlane_background)
-        // set search icon color
-        searchAffordanceColor = ContextCompat.getColor(context!!, R.color.search_opaque)
+        hideSearchAffordance()
+    }
+
+    private fun hideSearchAffordance() {
+        getTitleViewAdapter()?.getSearchAffordanceView()?.visibility = View.GONE
     }
 
     private fun loadRows() {
@@ -105,21 +104,43 @@ class MainFragment : BrowseSupportFragment() {
                 val movies = VideoLibraryRepository().fetchVideos()
                 mHandler.post {
                     if (!isAdded) return@post
-                    catalogueMovies = movies
-                    MovieList.replace(movies)
-                    if (movies.isEmpty()) {
+                    val randomizedMovies = movies.shuffled()
+                    catalogueMovies = randomizedMovies
+                    MovieList.replace(randomizedMovies)
+                    try {
+                        HomeScreenChannelPublisher(requireContext().applicationContext)
+                            .publish(randomizedMovies)
+                    } catch (exception: SecurityException) {
+                        Log.e(TAG, "YouKids is not allowed to publish a home-screen channel", exception)
+                    } catch (exception: IllegalArgumentException) {
+                        Log.e(TAG, "The home-screen channel data is invalid", exception)
+                    }
+                    if (randomizedMovies.isEmpty()) {
                         showLoadError(getString(R.string.empty_catalogue))
                     } else {
-                        showHomeRows(movies)
+                        showHomeRows(randomizedMovies)
+                        openHomeVideo(randomizedMovies)
                     }
                 }
+
             } catch (exception: IOException) {
                 Log.e(TAG, "Unable to load the video catalogue", exception)
                 mHandler.post {
                     if (isAdded) showLoadError(getString(R.string.catalogue_load_failed))
                 }
             }
+
         }
+    }
+
+    private fun openHomeVideo(movies: List<Movie>) {
+        val videoId = homeVideoId ?: return
+        homeVideoId = null
+        val movie = movies.firstOrNull { it.id == videoId } ?: return
+        startActivity(
+            Intent(requireContext(), PlaybackActivity::class.java)
+                .putExtra(DetailsActivity.MOVIE, movie),
+        )
     }
 
     private fun showHomeRows(movies: List<Movie>) {
@@ -137,7 +158,15 @@ class MainFragment : BrowseSupportFragment() {
 
         val youtubeMovies = movies.filter(::isYouTubeVideo)
         if (youtubeMovies.isNotEmpty()) {
-            addMovieRow(rowsAdapter, 1, getString(R.string.youtube_row), youtubeMovies)
+            val youtubeAdapter = ArrayObjectAdapter(YouTubeGridPresenter()).apply {
+                add(YouTubeGrid(youtubeMovies))
+            }
+            rowsAdapter.add(
+                ListRow(
+                    HeaderItem(1, getString(R.string.youtube_row)),
+                    youtubeAdapter,
+                ),
+            )
         }
 
         val otherMovies = movies.filterNot(::isYouTubeVideo)
@@ -156,15 +185,6 @@ class MainFragment : BrowseSupportFragment() {
         tagBackCallback?.isEnabled = true
         val rowsAdapter = ArrayObjectAdapter(ListRowPresenter())
         addMovieRow(rowsAdapter, 0, getString(R.string.tagged_videos_row, tag), taggedMovies)
-        adapter = rowsAdapter
-    }
-
-    private fun showSearchResults(movies: List<Movie>, query: String) {
-        selectedTag = null
-        tagBackCallback?.isEnabled = false
-        val rowsAdapter = ArrayObjectAdapter(ListRowPresenter())
-        addMovieRow(rowsAdapter, 0, getString(R.string.search_results, query), movies)
-        addAppSettingsRow(rowsAdapter, 1)
         adapter = rowsAdapter
     }
 
@@ -227,51 +247,8 @@ class MainFragment : BrowseSupportFragment() {
         requireActivity().onBackPressedDispatcher
             .addCallback(viewLifecycleOwner, backCallback)
 
-        setOnSearchClickedListener {
-            showSearchDialog()
-        }
-
         onItemViewClickedListener = ItemViewClickedListener()
         onItemViewSelectedListener = ItemViewSelectedListener()
-    }
-
-    private fun showSearchDialog() {
-        val searchField = EditText(requireContext()).apply {
-            hint = getString(R.string.search_hint)
-            inputType = InputType.TYPE_CLASS_TEXT
-            imeOptions = EditorInfo.IME_ACTION_SEARCH
-            setSingleLine(true)
-            setText(currentSearchQuery)
-            setSelection(text.length)
-        }
-
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.search_videos)
-            .setView(searchField)
-            .setPositiveButton(R.string.search_action) { _, _ ->
-                val query = searchField.text.toString().trim()
-                if (query.isBlank()) {
-                    currentSearchQuery = ""
-                    showHomeRows(catalogueMovies)
-                } else {
-                    val results = catalogueMovies.filter { movie ->
-                        movie.title.orEmpty().contains(query, ignoreCase = true) ||
-                            movie.description.orEmpty().contains(query, ignoreCase = true)
-                    }
-                    if (results.isEmpty()) {
-                        Toast.makeText(
-                            requireContext(),
-                            R.string.no_search_results,
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    } else {
-                        currentSearchQuery = query
-                        showSearchResults(results, query)
-                    }
-                }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
     }
 
     private inner class ItemViewClickedListener : OnItemViewClickedListener {
@@ -321,6 +298,7 @@ class MainFragment : BrowseSupportFragment() {
             itemViewHolder: Presenter.ViewHolder?, item: Any?,
             rowViewHolder: RowPresenter.ViewHolder, row: Row
         ) {
+            hideSearchAffordance()
             if (item is Movie) {
                 val selectedTitle = item.title?.takeIf(String::isNotBlank)
                 selectedVideoTitleView?.apply {

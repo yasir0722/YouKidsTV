@@ -59,6 +59,10 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                     selectPreferredTracks(playerAdapter.mediaPlayer)
                 }
             }
+
+            override fun onPlayCompleted(glue: PlaybackGlue) {
+                (activity as? PlaybackActivity)?.showVideoSuggestions()
+            }
         })
 
         if (movie.sourceType == "telegram") {
@@ -88,8 +92,20 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
     override fun onPause() {
         super.onPause()
+        pausePlayback()
+    }
+
+    fun pausePlayback(): Boolean {
+        if (!::mTransportControlGlue.isInitialized || !mTransportControlGlue.isPlaying) {
+            return false
+        }
+        mTransportControlGlue.pause()
+        return true
+    }
+
+    fun resumePlayback() {
         if (::mTransportControlGlue.isInitialized) {
-            mTransportControlGlue.pause()
+            mTransportControlGlue.play()
         }
     }
 

@@ -1,5 +1,6 @@
 <resources>
     <string name="app_name">YouKids</string>
+    <string name="home_screen_channel_name">YouKids videos</string>
     <string name="browse_title">YouKids</string>
     <string name="related_movies">Related Videos</string>
     <string name="videos_row">Explore all videos</string>
@@ -12,11 +13,6 @@
         <item quantity="other">%1$d videos</item>
     </plurals>
     <string name="other_videos_row">More to explore</string>
-    <string name="search_videos">Find a video</string>
-    <string name="search_hint">Search by video title or description</string>
-    <string name="search_action">Search</string>
-    <string name="search_results">Results for “%1$s”</string>
-    <string name="no_search_results">No matching videos. Try another search.</string>
     <string name="video_source_youtube">YouTube</string>
     <string name="video_source_telegram">From Telegram</string>
     <string name="video_source_other">Video</string>
@@ -35,21 +31,22 @@
     <string name="catalogue_load_failed">Could not load videos. Check the backend connection and try again.</string>
     <string name="empty_catalogue">No videos were found in the Telegram link topic.</string>
     <string name="playback_unavailable">Playback is temporarily unavailable.</string>
-    <string name="youtube_controls_hint">Left / right: seek 10 seconds  |  OK: play or pause  |  Up: show controls  |  Down: hide</string>
-    <string name="youtube_settings_button">YouTube audio &amp; subtitle settings</string>
+    <string name="youtube_controls_hint">Left / right: seek 10 seconds  |  OK: play or pause  |  Down: show controls  |  Up: hide</string>
     <string name="youtube_playback_speed">%1$.2f× speed</string>
     <string name="youtube_status_loading">Loading</string>
     <string name="youtube_status_playing">Playing</string>
     <string name="youtube_status_paused">Paused</string>
     <string name="youtube_status_buffering">Buffering</string>
     <string name="youtube_status_ended">Ended</string>
+    <string name="playback_video_list_title">Choose another video</string>
+    <string name="playback_no_other_videos">No other videos are available.</string>
     <string name="app_settings_row">Settings</string>
     <string name="app_update_card_title">App update</string>
     <string name="app_update_card_description">Check for a new version</string>
     <string name="app_update_title">YouKids settings</string>
     <string name="app_update_description">Updates are securely downloaded from Afterlight. Android will ask before installing.</string>
     <string name="playback_settings_title">Playback preferences</string>
-    <string name="playback_settings_description">YouKids prefers the selected audio and Malay subtitles when those tracks exist. On YouTube, use the YouTube player settings menu to switch audio tracks; YouTube may limit speed and quality.</string>
+    <string name="playback_settings_description">YouKids prefers the selected audio and Malay subtitles when those tracks exist. Change audio, subtitles, speed, quality, and screen timer here in Settings.</string>
     <string name="playback_audio_language">Preferred audio: %1$s</string>
     <string name="playback_audio_language_title">Preferred audio language</string>
     <string name="playback_speed_setting">Playback speed: %1$.2f×</string>
@@ -57,6 +54,17 @@
     <string name="playback_quality_setting">Preferred quality: %1$s</string>
     <string name="playback_quality_title">Preferred video quality</string>
     <string name="playback_subtitle_setting">Subtitles: %1$s</string>
+    <string name="screen_timer_setting">Screen timer: %1$s</string>
+    <string name="screen_timer_title">Screen timer</string>
+    <string name="screen_timer_minutes">%1$d minutes</string>
+    <string name="screen_timer_one_hour">1 hour</string>
+    <string name="screen_timer_remaining">TV %1$s  •  Time left: %2$s</string>
+    <string name="screen_timer_finished_title">Time is up</string>
+    <string name="screen_timer_finished_message">Choose the correct answer to continue.</string>
+    <string name="screen_timer_math_question">What is %1$d + %2$d?</string>
+    <string name="screen_timer_add_time_title">Add more time</string>
+    <string name="screen_timer_add_time_message">How much more time do you want?</string>
+    <string name="screen_timer_wrong_answer">That answer is not correct. Try a new question.</string>
     <string name="playback_subtitle_title">Subtitle language</string>
     <string name="playback_language_malay">Malay</string>
     <string name="playback_language_english">English</string>
