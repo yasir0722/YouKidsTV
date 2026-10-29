@@ -12,6 +12,7 @@ import android.os.Looper
 import androidx.leanback.app.BackgroundManager
 import androidx.leanback.app.BrowseSupportFragment
 import androidx.leanback.widget.ArrayObjectAdapter
+import androidx.leanback.widget.ClassPresenterSelector
 import androidx.leanback.widget.HeaderItem
 import androidx.leanback.widget.ImageCardView
 import androidx.leanback.widget.ListRow
@@ -146,7 +147,11 @@ class MainFragment : BrowseSupportFragment() {
     private fun showHomeRows(movies: List<Movie>) {
         selectedTag = null
         tagBackCallback?.isEnabled = false
-        val rowsAdapter = ArrayObjectAdapter(ListRowPresenter())
+        val presenterSelector = ClassPresenterSelector().apply {
+            addClassPresenter(ListRow::class.java, ListRowPresenter())
+            addClassPresenter(YouTubeGridRow::class.java, YouTubeGridRowPresenter())
+        }
+        val rowsAdapter = ArrayObjectAdapter(presenterSelector)
         val tags = MovieList.tagsFor(movies)
         val tagAdapter = ArrayObjectAdapter(TagCardPresenter())
         if (tags.isEmpty()) {
@@ -158,13 +163,10 @@ class MainFragment : BrowseSupportFragment() {
 
         val youtubeMovies = movies.filter(::isYouTubeVideo)
         if (youtubeMovies.isNotEmpty()) {
-            val youtubeAdapter = ArrayObjectAdapter(YouTubeGridPresenter()).apply {
-                add(YouTubeGrid(youtubeMovies))
-            }
             rowsAdapter.add(
-                ListRow(
+                YouTubeGridRow(
                     HeaderItem(1, getString(R.string.youtube_row)),
-                    youtubeAdapter,
+                    youtubeMovies,
                 ),
             )
         }

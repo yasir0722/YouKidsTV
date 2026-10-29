@@ -5,67 +5,84 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.view.Gravity
-import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import android.widget.HorizontalScrollView
 import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.leanback.widget.ArrayObjectAdapter
+import androidx.leanback.widget.HeaderItem
+import androidx.leanback.widget.HorizontalGridView
+import androidx.leanback.widget.ItemBridgeAdapter
 import androidx.leanback.widget.Presenter
+import androidx.leanback.widget.Row
+import androidx.leanback.widget.RowPresenter
 import com.bumptech.glide.Glide
 
-data class YouTubeGrid(val movies: List<Movie>)
+class YouTubeGridRow(
+    header: HeaderItem,
+    val movies: List<Movie>,
+) : Row(header)
 
-class YouTubeGridPresenter : Presenter() {
-    override fun onCreateViewHolder(parent: ViewGroup): ViewHolder =
+data class YouTubeGrid(val movies: List<Movie>) {
+    val rows: List<List<Movie>>
+        get() {
+            if (movies.isEmpty()) return emptyList()
+            val rowCount = minOf(MAX_ROWS, movies.size)
+            val moviesPerRow = (movies.size + rowCount - 1) / rowCount
+            return movies.chunked(moviesPerRow)
+        }
+
+    companion object {
+        private const val MAX_ROWS = 3
+    }
+}
+
+class YouTubeGridRowPresenter : RowPresenter() {
+    override fun createRowViewHolder(parent: ViewGroup): ViewHolder =
         ViewHolder(
-            LinearLayout(parent.context).apply {
-                orientation = LinearLayout.VERTICAL
-                isFocusable = false
-                descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+            HorizontalGridView(parent.context).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    GRID_HEIGHT.dp(context),
+                )
+                setNumRows(MAX_ROWS)
+                setHorizontalSpacing(CARD_GAP.dp(context))
+                setVerticalSpacing(ROW_GAP.dp(context))
+                setItemAlignmentOffset(0)
+                setItemAlignmentOffsetPercent(0f)
+                clipChildren = false
+                clipToPadding = false
+                setPadding(EDGE_PADDING.dp(context), 0, EDGE_PADDING.dp(context), 0)
             },
         )
 
-    override fun onBindViewHolder(viewHolder: ViewHolder, item: Any?) {
-        val container = viewHolder.view as LinearLayout
-        val grid = item as YouTubeGrid
-        container.removeAllViews()
-
-        val rowCount = minOf(MAX_ROWS, grid.movies.size)
-        val moviesPerRow = (grid.movies.size + rowCount - 1) / rowCount
-        grid.movies.chunked(moviesPerRow).forEach { movies ->
-            val row = LinearLayout(container.context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                isFocusable = false
-            }
-            movies.forEach { movie ->
-                row.addView(createCard(row, movie))
-            }
-            container.addView(
-                HorizontalScrollView(container.context).apply {
-                    isHorizontalScrollBarEnabled = false
-                    isFocusable = false
-                    isFillViewport = true
-                    overScrollMode = View.OVER_SCROLL_NEVER
-                    addView(row)
-                },
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    CARD_HEIGHT.dp(container),
-                ).apply {
-                    bottomMargin = ROW_GAP.dp(container)
-                },
-            )
+    override fun onBindRowViewHolder(viewHolder: ViewHolder, item: Any) {
+        super.onBindRowViewHolder(viewHolder, item)
+        val gridView = viewHolder.view as HorizontalGridView
+        val row = item as YouTubeGridRow
+        val objectAdapter = ArrayObjectAdapter(YouTubeGridCardPresenter()).apply {
+            YouTubeGrid(row.movies).rows.flatten().forEach(::add)
         }
+        gridView.adapter = ItemBridgeAdapter(objectAdapter)
     }
 
-    override fun onUnbindViewHolder(viewHolder: ViewHolder) {
-        (viewHolder.view as ViewGroup).removeAllViews()
+    override fun onUnbindRowViewHolder(viewHolder: ViewHolder) {
+        (viewHolder.view as HorizontalGridView).adapter = null
+        super.onUnbindRowViewHolder(viewHolder)
     }
 
-    private fun createCard(parent: ViewGroup, movie: Movie): View {
+    private companion object {
+        const val MAX_ROWS = 3
+        const val CARD_GAP = 8
+        const val ROW_GAP = 8
+        const val EDGE_PADDING = 24
+        const val GRID_HEIGHT = 328
+    }
+}
+
+private class YouTubeGridCardPresenter : Presenter() {
+    override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
         val context = parent.context
         val card = FrameLayout(context).apply {
             isFocusable = true
@@ -75,32 +92,12 @@ class YouTubeGridPresenter : Presenter() {
                 view.background = cardBackground(context, focused)
                 view.scaleX = if (focused) 1.05f else 1f
                 view.scaleY = if (focused) 1.05f else 1f
-                if (focused) {
-                    view.post {
-                        val scroll = view.parent?.parent as? HorizontalScrollView
-                            ?: return@post
-                        val target = view.left - (scroll.width - view.width) / 2
-                        scroll.smoothScrollTo(target.coerceAtLeast(0), 0)
-                    }
-                }
-            }
-            setOnClickListener {
-                context.startActivity(
-                    Intent(context, DetailsActivity::class.java)
-                        .putExtra(DetailsActivity.MOVIE, movie),
-                )
             }
         }
-        val image = ImageView(context).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
-        }
-        Glide.with(context)
-            .load(movie.cardImageUrl)
-            .placeholder(R.drawable.movie)
-            .error(R.drawable.movie)
-            .into(image)
         card.addView(
-            image,
+            ImageView(context).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+            },
             FrameLayout.LayoutParams(
                 CARD_WIDTH.dp(context),
                 IMAGE_HEIGHT.dp(context),
@@ -108,14 +105,15 @@ class YouTubeGridPresenter : Presenter() {
         )
         card.addView(
             TextView(context).apply {
-                text = movie.title.orEmpty().ifBlank { context.getString(R.string.movie) }
                 setTextColor(Color.WHITE)
                 textSize = 11f
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(6.dp(context), 0, 6.dp(context), 0)
-                setBackgroundColor(ContextCompat.getColor(context, R.color.playback_controls_background))
+                setBackgroundColor(
+                    ContextCompat.getColor(context, R.color.playback_controls_background),
+                )
             },
             FrameLayout.LayoutParams(
                 CARD_WIDTH.dp(context),
@@ -124,32 +122,55 @@ class YouTubeGridPresenter : Presenter() {
                 topMargin = IMAGE_HEIGHT.dp(context)
             },
         )
-        return card
-    }
-
-    private fun cardBackground(context: android.content.Context, focused: Boolean) =
-        GradientDrawable().apply {
-            cornerRadius = 6.dp(context).toFloat()
-            setColor(
-                ContextCompat.getColor(
-                    context,
-                    if (focused) R.color.selected_background else R.color.default_background,
-                ),
+        card.setOnClickListener {
+            val movie = card.tag as? Movie ?: return@setOnClickListener
+            context.startActivity(
+                Intent(context, DetailsActivity::class.java)
+                    .putExtra(DetailsActivity.MOVIE, movie),
             )
         }
-
-    private fun Int.dp(view: View): Int =
-        (this * view.resources.displayMetrics.density).toInt()
-
-    private fun Int.dp(context: android.content.Context): Int =
-        (this * context.resources.displayMetrics.density).toInt()
-
-    companion object {
-        private const val MAX_ROWS = 3
-        private const val CARD_WIDTH = 170
-        private const val IMAGE_HEIGHT = 78
-        private const val TITLE_HEIGHT = 26
-        private const val CARD_HEIGHT = IMAGE_HEIGHT + TITLE_HEIGHT
-        private const val ROW_GAP = 8
+        return ViewHolder(card)
     }
+
+    override fun onBindViewHolder(viewHolder: ViewHolder, item: Any?) {
+        val movie = item as Movie
+        val card = viewHolder.view as FrameLayout
+        card.tag = movie
+        (card.getChildAt(1) as TextView).text = movie.title.orEmpty().ifBlank {
+            card.context.getString(R.string.movie)
+        }
+        Glide.with(card.context)
+            .load(movie.cardImageUrl)
+            .placeholder(R.drawable.movie)
+            .error(R.drawable.movie)
+            .into(card.getChildAt(0) as ImageView)
+    }
+
+    override fun onUnbindViewHolder(viewHolder: ViewHolder) {
+        val card = viewHolder.view as FrameLayout
+        (card.getChildAt(0) as ImageView).setImageDrawable(null)
+        card.tag = null
+    }
+
+    private companion object {
+        const val CARD_WIDTH = 170
+        const val IMAGE_HEIGHT = 78
+        const val TITLE_HEIGHT = 26
+    }
+}
+
+private fun Int.dp(context: android.content.Context): Int =
+    (this * context.resources.displayMetrics.density).toInt()
+
+private fun cardBackground(
+    context: android.content.Context,
+    focused: Boolean,
+) = GradientDrawable().apply {
+    cornerRadius = 6.dp(context).toFloat()
+    setColor(
+        ContextCompat.getColor(
+            context,
+            if (focused) R.color.selected_background else R.color.default_background,
+        ),
+    )
 }

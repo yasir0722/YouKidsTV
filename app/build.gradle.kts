@@ -16,8 +16,8 @@ android {
         applicationId = "com.example.youkids"
         minSdk = 23
         targetSdk = 37
-        versionCode = 18
-        versionName = "2.7"
+        versionCode = 21
+        versionName = "2.10"
         buildConfigField("String", "API_BASE_URL", "\"$youkidsApiBaseUrl\"")
     }
 

@@ -191,15 +191,21 @@ class AppUpdateActivity : FragmentActivity() {
         statusText.setText(R.string.app_refresh_catalogue_running)
         updateExecutor.execute {
             try {
-                repository.refreshCatalogue()
+                val result = repository.refreshCatalogue()
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
-                    statusText.setText(R.string.app_refresh_catalogue_waiting)
+                    statusText.text = getString(
+                        R.string.app_refresh_catalogue_completed,
+                        result.created,
+                        result.updated,
+                        result.skipped,
+                        result.deleted,
+                    )
                     statusText.postDelayed({
                         if (isFinishing || isDestroyed) return@postDelayed
                         setResult(RESULT_OK)
                         finish()
-                    }, REFRESH_SETTLE_DELAY_MS)
+                    }, REFRESH_RESULT_DISPLAY_MS)
                 }
             } catch (exception: IOException) {
                 android.util.Log.e(TAG, "Unable to refresh the video catalogue", exception)
@@ -391,6 +397,6 @@ class AppUpdateActivity : FragmentActivity() {
     companion object {
         private const val TAG = "AppUpdateActivity"
         private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
-        private const val REFRESH_SETTLE_DELAY_MS = 5_000L
+        private const val REFRESH_RESULT_DISPLAY_MS = 2_500L
     }
 }

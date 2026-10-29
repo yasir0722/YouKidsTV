@@ -23,9 +23,18 @@ data class AppReleaseInfo(
     val downloadUrl: String,
 )
 
+data class CatalogueSyncResult(
+    val scanned: Int,
+    val synchronized: Int,
+    val created: Int,
+    val updated: Int,
+    val skipped: Int,
+    val deleted: Int,
+)
+
 class AppUpdateRepository(private val context: Context) {
 
-    fun refreshCatalogue() {
+    fun refreshCatalogue(): CatalogueSyncResult {
         val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
         val connection = trustedApiConnection(URL("$baseUrl/public/videos/refresh"))
         try {
@@ -34,6 +43,24 @@ class AppUpdateRepository(private val context: Context) {
             val statusCode = connection.responseCode
             if (statusCode !in 200..299) {
                 throw IOException("Afterlight catalogue refresh failed ($statusCode).")
+            }
+            val body = readSuccessfulResponse(connection)
+            val result = try {
+                JSONObject(body).getJSONObject("result")
+            } catch (exception: JSONException) {
+                throw IOException("Afterlight returned an incomplete catalogue refresh result.", exception)
+            }
+            return try {
+                CatalogueSyncResult(
+                    scanned = result.getInt("scanned"),
+                    synchronized = result.getInt("synchronized"),
+                    created = result.getInt("created"),
+                    updated = result.getInt("updated"),
+                    skipped = result.getInt("skipped"),
+                    deleted = result.getInt("deleted"),
+                )
+            } catch (exception: JSONException) {
+                throw IOException("Afterlight returned an invalid catalogue refresh result.", exception)
             }
         } finally {
             connection.disconnect()

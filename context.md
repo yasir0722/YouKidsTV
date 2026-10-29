@@ -209,7 +209,8 @@ may contain comma-, pipe-, or newline-separated labels; each label is shown as
 its own selectable tag. **Watch on YouTube** remains one browse tab whose
 content is arranged as up to three compact, horizontally scrollable card rows
 instead of three tabs or one long horizontal row. Focus follows the remote and
-scrolls the active row toward the selected card.
+scrolls the active row toward the selected card. Each row includes edge
+padding so the first and last cards can be brought fully into view.
 
 The app shuffles the catalogue when it loads. This keeps the main rows,
 filtered tag lists, related videos, and the in-player alternative-video list
@@ -223,6 +224,97 @@ controls, allowing the viewer to move between alternative videos with
 Left/Right and open one with OK. Back hides the strip before leaving playback.
 The same suggestion strip opens automatically when the current video reaches
 the end, for both YouTube and direct video playback.
+
+## Review required before further implementation
+
+Investigation on 2026-10-17 found the following issues. These are review TODOs
+only; no implementation has been approved from this list yet.
+
+### YouTube grid: first and last cards cannot be reached
+
+**Observed behavior:** the three-row **Watch on YouTube** section displays
+cards in the middle of each row, but the far-left and far-right cards cannot
+reliably receive remote focus or be brought fully onscreen.
+
+**Likely cause:** the previous custom three-row card view was nested inside
+Leanback's own horizontally focused `ListRow`. Each internal row used a
+`HorizontalScrollView`, while the outer Leanback `HorizontalGridView` also
+handled D-pad focus. The internal scroll command ran only after a card gained
+focus; the outer Leanback row could intercept Left/Right before focus reached
+an offscreen card. Edge padding therefore could not make unreachable cards
+reachable.
+
+**Implementation status:** the nested `ListRow`/grid arrangement has been
+replaced with a custom Leanback `YouTubeGridRow` and `YouTubeGridRowPresenter`.
+The row itself owns one `HorizontalGridView` configured for three visual rows,
+so the grid is no longer nested inside another horizontally focused row.
+
+**Device verification completed on the Android TV emulator:**
+
+1. One **Watch on YouTube** header displays three visual rows.
+2. Cards render in the emulator and D-pad focus enters the grid.
+3. Repeated Right reached the horizontal right edge; repeated Left returned
+   to the horizontal left edge.
+4. Down moved to the next visual row and Up returned to the previous row.
+
+The grid partition now has JVM unit coverage for at-most-three-row layout,
+preserved ordering, and first/last video retention. Device verification was
+performed manually because the repository has no Android instrumentation test
+setup.
+
+### Telegram sync: some expected videos do not appear
+
+**Observed behavior:** the TV Settings sync action calls
+`POST /api/v1/public/videos/refresh`. The endpoint responded with HTTP 202 and
+`Telegram synchronization queued.` on 2026-10-17. After the queue had time to
+settle, the public catalogue remained unchanged at 37 videos.
+
+**Live catalogue evidence:** `GET /api/v1/public/videos?per_page=100&page=1`
+returned 37 published entries, all with `media.provider = youtube`,
+`media.type = external_url`, and an empty `tag`. There were no direct MP4 or
+Telegram-upload entries in the public response.
+
+**Important distinction:** the web sync's `scanned: 170` count covers all
+Telegram messages seen by the backend, not just the 37 records eligible for
+the public TV catalogue. The public feed intentionally includes only published
+videos assigned to the configured primary channel's `link` topic. External
+links must be HTTPS YouTube or direct `.mp4` URLs. Telegram-uploaded videos
+and messages in other topics may be synchronized into the private library but
+will not appear in YouKids.
+
+**Investigation result:** the public Android endpoint remains asynchronous:
+`POST /api/v1/public/videos/refresh` returns HTTP 202 with only
+`Telegram synchronization queued.` and no job ID or result counts. However,
+the authenticated Afterlight web application exposes a synchronous flow.
+Using its **Sync videos from Telegram** action calls
+`POST /api/v1/sync/telegram` and returns HTTP 200 with:
+`scanned`, `synchronized`, `created`, `updated`, `skipped`, and `deleted`.
+The observed response was `scanned: 170`, `synchronized: 170`, `created: 0`,
+`updated: 170`, `skipped: 0`, and `deleted: 0`.
+
+**Backend inspection result:**
+
+The backend source is now available at
+`/Users/techqesb/Dev/telegram-video-library`. Its authenticated web action
+calls `POST /api/v1/sync/telegram`, which invokes
+`TelegramSyncService::synchronize()` synchronously and returns
+`scanned`, `synchronized`, `created`, `updated`, `skipped`, and `deleted`.
+The Android public endpoint now runs the same synchronous service and returns
+the result fields directly. This is intentionally synchronous for the small
+private deployment; the existing one-request-per-minute throttle remains in
+place.
+
+The parser and sync service do support multiple supported links in one
+Telegram message. Each link receives a deterministic source ID composed from
+the Telegram message ID and a URL hash.
+
+**Remaining TODOs:**
+
+1. Compare every expected Telegram post against the configured primary
+   channel, `link` topic, publication status, and supported URL format.
+2. Add an end-to-end test: post a supported YouTube link and a supported MP4
+   in the configured topic, request sync, then assert the expected catalogue
+   count and video IDs are present in the public API and TV UI.
 
 Playback preferences are saved on the TV and default to Malay audio where a
 track is available, 0.75× speed, preferred 1080p YouTube quality, and Malay
@@ -250,6 +342,9 @@ Build the debug APK with `:app:assembleDebug`; the artifact is
 Settings with the exact APK version name and a version code greater than the
 currently published release. The updater validates the package, version,
 file size, and SHA-256 checksum before handing the APK to Android's installer.
+
+The latest published release is YouKids `2.9` (version code `20`), SHA-256
+`f832f33206889700a4d31592aeb2e054ddc72f09f40d8fae2ae2c9417b5668d8`.
 
 This personal sideload build uses Android Studio's `~/.android/debug.keystore`.
 Preserve that signing key for future updates or Android will not accept them

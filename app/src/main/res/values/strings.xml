@@ -81,7 +81,7 @@
     <string name="app_update_check_button">Check for updates</string>
     <string name="app_refresh_catalogue_button">Sync videos from Telegram</string>
     <string name="app_refresh_catalogue_running">Syncing videos from Telegram...</string>
-    <string name="app_refresh_catalogue_waiting">Sync queued. Updating the video list...</string>
+    <string name="app_refresh_catalogue_completed">Sync complete: %1$d added, %2$d updated, %3$d skipped, %4$d removed.</string>
     <string name="app_refresh_catalogue_error">Video sync failed: %1$s</string>
     <string name="app_update_checking">Checking Afterlight for updates...</string>
     <string name="app_update_no_release">No YouKids APK has been published in Afterlight yet.</string>
