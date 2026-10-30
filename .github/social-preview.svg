@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#08172F"/>
+      <stop offset="1" stop-color="#123E59"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="700" y1="160" x2="1080" y2="450" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E6FBF7"/>
+      <stop offset="1" stop-color="#BCEFEA"/>
+    </linearGradient>
+    <linearGradient id="tileOne" x1="756" y1="258" x2="858" y2="365" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7B267"/>
+      <stop offset="1" stop-color="#EF6F6C"/>
+    </linearGradient>
+    <linearGradient id="tileTwo" x1="875" y1="258" x2="977" y2="365" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#59C3C3"/>
+      <stop offset="1" stop-color="#2B6F8E"/>
+    </linearGradient>
+    <linearGradient id="tileThree" x1="994" y1="258" x2="1070" y2="365" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A78BFA"/>
+      <stop offset="1" stop-color="#5362B5"/>
+    </linearGradient>
+    <filter id="shadow" x="642" y="106" width="500" height="433" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+  <path fill="url(#background)" d="M0 0h1200v630H0z"/>
+  <circle cx="1095" cy="72" r="220" fill="#31D3C4" fill-opacity=".08"/>
+  <circle cx="106" cy="600" r="230" fill="#31D3C4" fill-opacity=".06"/>
+  <path d="M0 510c210-78 332-91 540-20v140H0z" fill="#fff" fill-opacity=".025"/>
+
+  <g font-family="Arial, Helvetica, sans-serif">
+    <rect x="80" y="76" width="188" height="34" rx="17" fill="#153B52"/>
+    <circle cx="101" cy="93" r="5" fill="#32D3C4"/>
+    <text x="116" y="99" fill="#BCEFEA" font-size="13" font-weight="700" letter-spacing="1.2">ANDROID TV APP</text>
+
+    <text x="76" y="214" fill="#FFFFFF" font-size="82" font-weight="700" letter-spacing="-3">YouKids</text>
+    <text x="82" y="270" fill="#D9F5F1" font-size="30" font-weight="600">Tontonan pilihan keluarga</text>
+    <text x="82" y="311" fill="#AFC6D5" font-size="22">Video daripada sumber yang anda pilih sahaja.</text>
+
+    <g>
+      <rect x="82" y="365" width="195" height="44" rx="22" fill="#173B50" stroke="#316176"/>
+      <circle cx="105" cy="387" r="5" fill="#32D3C4"/>
+      <text x="120" y="393" fill="#E8F7F5" font-size="15" font-weight="600">Kandungan pilihan</text>
+
+      <rect x="287" y="365" width="176" height="44" rx="22" fill="#173B50" stroke="#316176"/>
+      <circle cx="310" cy="387" r="5" fill="#32D3C4"/>
+      <text x="325" y="393" fill="#E8F7F5" font-size="15" font-weight="600">Had masa skrin</text>
+
+      <rect x="82" y="421" width="200" height="44" rx="22" fill="#173B50" stroke="#316176"/>
+      <circle cx="105" cy="443" r="5" fill="#32D3C4"/>
+      <text x="120" y="449" fill="#E8F7F5" font-size="15" font-weight="600">Tiada feed Shorts</text>
+    </g>
+
+    <text x="82" y="548" fill="#81A5B6" font-size="15" font-weight="600" letter-spacing="1.1">PILIHAN KANDUNGAN DI TANGAN ANDA</text>
+  </g>
+
+  <rect x="665" y="129" width="450" height="376" rx="34" fill="#31D3C4" fill-opacity=".17" filter="url(#shadow)"/>
+  <rect x="674" y="121" width="432" height="354" rx="28" fill="#08111F" stroke="#3A6374" stroke-width="3"/>
+  <rect x="692" y="139" width="396" height="318" rx="17" fill="url(#screen)"/>
+
+  <g font-family="Arial, Helvetica, sans-serif">
+    <rect x="714" y="160" width="30" height="30" rx="9" fill="#073B4A"/>
+    <path d="M726 168v14l11-7z" fill="#43D8C4"/>
+    <text x="755" y="181" fill="#123548" font-size="16" font-weight="700">PILIHAN UNTUK DITONTON</text>
+    <text x="716" y="224" fill="#315B6A" font-size="13" font-weight="600">KANDUNGAN PILIHAN</text>
+
+    <rect x="715" y="241" width="106" height="116" rx="14" fill="url(#tileOne)"/>
+    <path d="M753 276v42l34-21z" fill="#fff" fill-opacity=".9"/>
+    <rect x="834" y="241" width="106" height="116" rx="14" fill="url(#tileTwo)"/>
+    <circle cx="887" cy="299" r="25" fill="#fff" fill-opacity=".2"/>
+    <path d="M881 284v30l24-15z" fill="#fff" fill-opacity=".9"/>
+    <rect x="953" y="241" width="112" height="116" rx="14" fill="url(#tileThree)"/>
+    <path d="M991 276v42l34-21z" fill="#fff" fill-opacity=".9"/>
+
+    <rect x="715" y="374" width="350" height="45" rx="12" fill="#D1EEE9"/>
+    <circle cx="738" cy="396" r="8" fill="#0C9B91"/>
+    <text x="755" y="401" fill="#244B59" font-size="14" font-weight="600">Pilihan ditentukan oleh anda</text>
+  </g>
+
+  <path d="M858 476h64l18 37H840z" fill="#163245"/>
+  <rect x="815" y="508" width="150" height="10" rx="5" fill="#244A5D"/>
+  <circle cx="1090" cy="298" r="5" fill="#31D3C4"/>
+</svg>

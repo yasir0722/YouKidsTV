@@ -343,8 +343,8 @@ Settings with the exact APK version name and a version code greater than the
 currently published release. The updater validates the package, version,
 file size, and SHA-256 checksum before handing the APK to Android's installer.
 
-The latest published release is YouKids `2.9` (version code `20`), SHA-256
-`f832f33206889700a4d31592aeb2e054ddc72f09f40d8fae2ae2c9417b5668d8`.
+The latest published release is YouKids `2.12` (version code `23`), SHA-256
+`6307d4dfa4203b59a0ec29f91190a0cfb17f9db6995782d3fc710a56c1ec4904`.
 
 This personal sideload build uses Android Studio's `~/.android/debug.keystore`.
 Preserve that signing key for future updates or Android will not accept them

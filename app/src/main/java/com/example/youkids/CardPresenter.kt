@@ -1,6 +1,8 @@
 package com.example.youkids
 
 import android.graphics.drawable.Drawable
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import androidx.leanback.widget.ImageCardView
 import androidx.leanback.widget.Presenter
 import androidx.core.content.ContextCompat
@@ -75,6 +77,16 @@ class CardPresenter : Presenter() {
         // during animations.
         view.setBackgroundColor(color)
         view.setInfoAreaBackgroundColor(color)
+        view.foreground = if (selected) {
+            val density = view.resources.displayMetrics.density
+            GradientDrawable().apply {
+                setColor(Color.TRANSPARENT)
+                setStroke((5 * density).toInt(), sSelectedBackgroundColor)
+                cornerRadius = 8 * density
+            }
+        } else {
+            null
+        }
     }
 
     companion object {

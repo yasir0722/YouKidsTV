@@ -90,6 +90,7 @@ private class YouTubeGridCardPresenter : Presenter() {
             background = cardBackground(context, false)
             setOnFocusChangeListener { view, focused ->
                 view.background = cardBackground(context, focused)
+                view.foreground = if (focused) cardFocusOverlay(context) else null
                 view.scaleX = if (focused) 1.05f else 1f
                 view.scaleY = if (focused) 1.05f else 1f
             }
@@ -173,4 +174,14 @@ private fun cardBackground(
             if (focused) R.color.selected_background else R.color.default_background,
         ),
     )
+    if (focused) {
+        setStroke(4.dp(context), Color.RED)
+    }
 }
+
+private fun cardFocusOverlay(context: android.content.Context) =
+    GradientDrawable().apply {
+        cornerRadius = 6.dp(context).toFloat()
+        setColor(Color.TRANSPARENT)
+        setStroke(2.dp(context), Color.WHITE)
+    }
