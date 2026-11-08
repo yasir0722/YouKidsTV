@@ -3,18 +3,20 @@ package com.example.youkids
 import java.util.Timer
 import java.util.TimerTask
 
+import android.app.AlertDialog
 import android.app.Activity
 import android.content.Intent
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.leanback.app.BackgroundManager
 import androidx.leanback.app.BrowseSupportFragment
 import androidx.leanback.widget.ArrayObjectAdapter
 import androidx.leanback.widget.ClassPresenterSelector
 import androidx.leanback.widget.HeaderItem
-import androidx.leanback.widget.ImageCardView
+import androidx.leanback.widget.HorizontalGridView
 import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.ListRowPresenter
 import androidx.leanback.widget.OnItemViewClickedListener
@@ -22,7 +24,6 @@ import androidx.leanback.widget.OnItemViewSelectedListener
 import androidx.leanback.widget.Presenter
 import androidx.leanback.widget.Row
 import androidx.leanback.widget.RowPresenter
-import androidx.core.app.ActivityOptionsCompat
 import androidx.core.content.ContextCompat
 import androidx.activity.OnBackPressedCallback
 import android.util.DisplayMetrics
@@ -31,6 +32,7 @@ import android.view.View
 import android.widget.TextView
 import android.widget.Toast
 import java.io.IOException
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.Executors
 
 import com.bumptech.glide.Glide
@@ -41,9 +43,17 @@ import com.bumptech.glide.request.transition.Transition
  * Loads a grid of cards with movies to browse.
  */
 class MainFragment : BrowseSupportFragment() {
+    private data class CatalogueFocus(
+        val movieId: Long?,
+        val videoTagName: String?,
+        val settingsCard: Boolean,
+    )
+
 
     private val mHandler = Handler(Looper.getMainLooper())
     private val apiExecutor = Executors.newSingleThreadExecutor()
+    private val homeRefreshPolicy = HomeRefreshPolicy()
+    @Volatile private var homeForeground = false
     private lateinit var mBackgroundManager: BackgroundManager
     private var mDefaultBackground: Drawable? = null
     private lateinit var mMetrics: DisplayMetrics
@@ -53,7 +63,17 @@ class MainFragment : BrowseSupportFragment() {
     private var catalogueMovies: List<Movie> = emptyList()
     private var selectedTag: String? = null
     private var tagBackCallback: OnBackPressedCallback? = null
+    private var selectedMovieId: Long? = null
+    private var selectedVideoTagName: String? = null
+    private var selectedSettingsCard = false
+    private var pendingCatalogueMovies: List<Movie>? = null
+    private var pendingCatalogueFetch = false
+    private var pendingUpdateRelease: AppReleaseInfo? = null
+    private var dismissedUpdateVersionCodeThisLaunch: Long? = null
+    private var updateDialog: AlertDialog? = null
     var homeVideoId: Long? = null
+
+    private val homeMaintenanceTask = Runnable { runHomeMaintenance() }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         Log.i(TAG, "onCreate")
@@ -69,10 +89,39 @@ class MainFragment : BrowseSupportFragment() {
     }
 
     override fun onDestroy() {
+        homeForeground = false
+        mHandler.removeCallbacks(homeMaintenanceTask)
+        updateDialog?.dismiss()
+        updateDialog = null
         super.onDestroy()
         Log.d(TAG, "onDestroy: " + mBackgroundTimer?.toString())
         mBackgroundTimer?.cancel()
         apiExecutor.shutdownNow()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        homeForeground = true
+        pendingCatalogueMovies?.let { movies ->
+            pendingCatalogueMovies = null
+            pendingCatalogueFetch = false
+            applyCatalogue(movies, currentCatalogueFocus())
+        }
+        if (pendingCatalogueFetch) {
+            pendingCatalogueFetch = false
+            loadRows(preserveFocus = true)
+        }
+        pendingUpdateRelease?.let { release ->
+            pendingUpdateRelease = null
+            showUpdatePrompt(release)
+        }
+        runHomeMaintenance()
+    }
+
+    override fun onPause() {
+        homeForeground = false
+        mHandler.removeCallbacks(homeMaintenanceTask)
+        super.onPause()
     }
 
     private fun prepareBackgroundManager() {
@@ -99,29 +148,15 @@ class MainFragment : BrowseSupportFragment() {
         getTitleViewAdapter()?.getSearchAffordanceView()?.visibility = View.GONE
     }
 
-    private fun loadRows() {
+    private fun loadRows(preserveFocus: Boolean = false) {
+        val focusToRestore = if (preserveFocus) currentCatalogueFocus() else null
         apiExecutor.execute {
             try {
                 val movies = VideoLibraryRepository().fetchVideos()
                 mHandler.post {
                     if (!isAdded) return@post
-                    val randomizedMovies = movies.shuffled()
-                    catalogueMovies = randomizedMovies
-                    MovieList.replace(randomizedMovies)
-                    try {
-                        HomeScreenChannelPublisher(requireContext().applicationContext)
-                            .publish(randomizedMovies)
-                    } catch (exception: SecurityException) {
-                        Log.e(TAG, "YouKids is not allowed to publish a home-screen channel", exception)
-                    } catch (exception: IllegalArgumentException) {
-                        Log.e(TAG, "The home-screen channel data is invalid", exception)
-                    }
-                    if (randomizedMovies.isEmpty()) {
-                        showLoadError(getString(R.string.empty_catalogue))
-                    } else {
-                        showHomeRows(randomizedMovies)
-                        openHomeVideo(randomizedMovies)
-                    }
+                    applyCatalogue(movies, focusToRestore)
+                    openHomeVideo(catalogueMovies)
                 }
 
             } catch (exception: IOException) {
@@ -134,6 +169,224 @@ class MainFragment : BrowseSupportFragment() {
         }
     }
 
+    private fun applyCatalogue(
+        movies: List<Movie>,
+        focusToRestore: CatalogueFocus? = null,
+    ) {
+        val randomizedMovies = movies.shuffled()
+        catalogueMovies = randomizedMovies
+        MovieList.replace(randomizedMovies)
+        publishHomeScreenChannel(randomizedMovies)
+
+        if (randomizedMovies.isEmpty()) {
+            showLoadError(getString(R.string.empty_catalogue))
+            return
+        }
+
+        val activeTag = selectedTag
+        if (activeTag != null &&
+            MovieList.videosForTag(randomizedMovies, activeTag).isNotEmpty()
+        ) {
+            showTagVideos(activeTag, focusToRestore)
+        } else {
+            selectedTag = null
+            tagBackCallback?.isEnabled = false
+            showHomeRows(randomizedMovies, focusToRestore)
+        }
+    }
+
+    private fun publishHomeScreenChannel(movies: List<Movie>) {
+        try {
+            HomeScreenChannelPublisher(requireContext().applicationContext).publish(movies)
+        } catch (exception: SecurityException) {
+            Log.e(TAG, "YouKids is not allowed to publish a home-screen channel", exception)
+        } catch (exception: IllegalArgumentException) {
+            Log.e(TAG, "The home-screen channel data is invalid", exception)
+        }
+    }
+
+    private fun currentCatalogueFocus(): CatalogueFocus =
+        CatalogueFocus(
+            movieId = selectedMovieId,
+            videoTagName = selectedVideoTagName,
+            settingsCard = selectedSettingsCard,
+        )
+
+    private fun hasCatalogueChanged(previous: List<Movie>, latest: List<Movie>): Boolean =
+        previous.size != latest.size ||
+            previous.associateBy(Movie::id) != latest.associateBy(Movie::id)
+
+    private fun runHomeMaintenance() {
+        if (!homeForeground || !isAdded) return
+
+        val now = SystemClock.elapsedRealtime()
+        if (homeRefreshPolicy.tryStartUpdateCheck(now)) {
+            checkForUpdatesInBackground()
+        }
+        if (homeRefreshPolicy.tryStartCatalogueSync(now)) {
+            syncCatalogueInBackground()
+        }
+        scheduleHomeMaintenance()
+    }
+
+    private fun scheduleHomeMaintenance() {
+        mHandler.removeCallbacks(homeMaintenanceTask)
+        if (!homeForeground || !isAdded) return
+
+        val now = SystemClock.elapsedRealtime()
+        val delayMs = minOf(
+            homeRefreshPolicy.updateCheckDelayMs(now),
+            homeRefreshPolicy.catalogueSyncDelayMs(now),
+        ).coerceAtLeast(MIN_HOME_MAINTENANCE_DELAY_MS)
+        mHandler.postDelayed(homeMaintenanceTask, delayMs)
+    }
+
+    private fun checkForUpdatesInBackground() {
+        val appContext = requireContext().applicationContext
+        try {
+            apiExecutor.execute {
+                if (!homeForeground) {
+                    mHandler.post {
+                        homeRefreshPolicy.cancelUpdateCheck()
+                        scheduleHomeMaintenance()
+                    }
+                    return@execute
+                }
+
+                try {
+                    val release = AppUpdateRepository(appContext).latestRelease()
+                    mHandler.post {
+                        homeRefreshPolicy.finishUpdateCheck()
+                        if (!isAdded) return@post
+                        if (release != null && release.versionCode > BuildConfig.VERSION_CODE) {
+                            if (homeForeground) {
+                                showUpdatePrompt(release)
+                            } else {
+                                pendingUpdateRelease = release
+                            }
+                        }
+                        scheduleHomeMaintenance()
+                    }
+                } catch (exception: IOException) {
+                    Log.e(TAG, "Unable to check for app updates automatically", exception)
+                    mHandler.post {
+                        homeRefreshPolicy.finishUpdateCheck()
+                        scheduleHomeMaintenance()
+                    }
+                }
+            }
+        } catch (exception: RejectedExecutionException) {
+            homeRefreshPolicy.cancelUpdateCheck()
+            Log.e(TAG, "Unable to queue the automatic app update check", exception)
+        }
+    }
+
+    private fun syncCatalogueInBackground() {
+        val appContext = requireContext().applicationContext
+        try {
+            apiExecutor.execute {
+                if (!homeForeground) {
+                    mHandler.post {
+                        homeRefreshPolicy.cancelCatalogueSync()
+                        scheduleHomeMaintenance()
+                    }
+                    return@execute
+                }
+
+                try {
+                    val result = AppUpdateRepository(appContext).refreshCatalogue()
+                    val catalogueChanged =
+                        result.created > 0 || result.updated > 0 || result.deleted > 0
+                    if (catalogueChanged && !homeForeground) {
+                        mHandler.post {
+                            homeRefreshPolicy.finishCatalogueSync()
+                            if (isAdded) pendingCatalogueFetch = true
+                            scheduleHomeMaintenance()
+                        }
+                        return@execute
+                    }
+                    val movies = if (catalogueChanged) {
+                        VideoLibraryRepository().fetchVideos()
+                    } else {
+                        null
+                    }
+                    mHandler.post {
+                        homeRefreshPolicy.finishCatalogueSync()
+                        if (!isAdded) return@post
+                        if (movies != null && hasCatalogueChanged(catalogueMovies, movies)) {
+                            if (homeForeground) {
+                                applyCatalogue(movies, currentCatalogueFocus())
+                            } else {
+                                pendingCatalogueMovies = movies
+                            }
+                        }
+                        scheduleHomeMaintenance()
+                    }
+                } catch (exception: CatalogueRefreshRateLimitedException) {
+                    Log.i(
+                        TAG,
+                        "Automatic catalogue sync is rate-limited for ${exception.retryAfterSeconds} seconds",
+                    )
+                    mHandler.post {
+                        homeRefreshPolicy.finishCatalogueSync()
+                        scheduleHomeMaintenance()
+                    }
+                } catch (exception: IOException) {
+                    Log.e(TAG, "Unable to sync the video catalogue automatically", exception)
+                    mHandler.post {
+                        homeRefreshPolicy.finishCatalogueSync()
+                        scheduleHomeMaintenance()
+                    }
+                }
+            }
+        } catch (exception: RejectedExecutionException) {
+            homeRefreshPolicy.cancelCatalogueSync()
+            Log.e(TAG, "Unable to queue the automatic catalogue sync", exception)
+        }
+    }
+
+    private fun showUpdatePrompt(release: AppReleaseInfo) {
+        if (!isAdded ||
+            !homeForeground ||
+            !isResumed ||
+            release.versionCode <= BuildConfig.VERSION_CODE ||
+            dismissedUpdateVersionCodeThisLaunch == release.versionCode ||
+            updateDialog?.isShowing == true
+        ) {
+            return
+        }
+
+        val dialog = AlertDialog.Builder(requireContext())
+            .setTitle(R.string.app_update_prompt_title)
+            .setMessage(getString(R.string.app_update_prompt_message, release.versionName))
+            .setPositiveButton(R.string.app_update_prompt_now) { _, _ ->
+                dismissedUpdateVersionCodeThisLaunch = release.versionCode
+                updateDialog = null
+                startActivity(
+                    Intent(requireContext(), AppUpdateActivity::class.java)
+                        .putExtra(AppUpdateActivity.EXTRA_AUTO_DOWNLOAD_UPDATE, true),
+                )
+            }
+            .setNegativeButton(R.string.app_update_prompt_later) { _, _ ->
+                dismissedUpdateVersionCodeThisLaunch = release.versionCode
+                updateDialog = null
+            }
+            .setOnCancelListener {
+                dismissedUpdateVersionCodeThisLaunch = release.versionCode
+                updateDialog = null
+            }
+            .create()
+        updateDialog = dialog
+        dialog.setOnDismissListener {
+            if (updateDialog === dialog) updateDialog = null
+        }
+        dialog.show()
+    }
+
+    private fun applyUpdatedCatalogue(movies: List<Movie>) {
+        applyCatalogue(movies, currentCatalogueFocus())
+    }
+
     private fun openHomeVideo(movies: List<Movie>) {
         val videoId = homeVideoId ?: return
         homeVideoId = null
@@ -144,7 +397,10 @@ class MainFragment : BrowseSupportFragment() {
         )
     }
 
-    private fun showHomeRows(movies: List<Movie>) {
+    private fun showHomeRows(
+        movies: List<Movie>,
+        focusToRestore: CatalogueFocus? = null,
+    ) {
         selectedTag = null
         tagBackCallback?.isEnabled = false
         val presenterSelector = ClassPresenterSelector().apply {
@@ -177,9 +433,13 @@ class MainFragment : BrowseSupportFragment() {
         }
         addAppSettingsRow(rowsAdapter)
         adapter = rowsAdapter
+        focusToRestore?.let { restoreHomeFocus(movies, it) }
     }
 
-    private fun showTagVideos(tag: String) {
+    private fun showTagVideos(
+        tag: String,
+        focusToRestore: CatalogueFocus? = null,
+    ) {
         val taggedMovies = MovieList.videosForTag(catalogueMovies, tag)
         if (taggedMovies.isEmpty()) return
 
@@ -188,6 +448,58 @@ class MainFragment : BrowseSupportFragment() {
         val rowsAdapter = ArrayObjectAdapter(ListRowPresenter())
         addMovieRow(rowsAdapter, 0, getString(R.string.tagged_videos_row, tag), taggedMovies)
         adapter = rowsAdapter
+        focusToRestore?.movieId?.let { movieId ->
+            val itemPosition = taggedMovies.indexOfFirst { it.id == movieId }
+                .takeIf { it >= 0 }
+                ?: 0
+            restoreGridFocus(0, itemPosition)
+        }
+    }
+
+    private fun restoreHomeFocus(movies: List<Movie>, focus: CatalogueFocus) {
+        val tags = MovieList.tagsFor(movies)
+        val youtubeMovies = movies.filter(::isYouTubeVideo)
+        val otherMovies = movies.filterNot(::isYouTubeVideo)
+        val position = when {
+            focus.movieId != null -> {
+                val youtubeIndex = youtubeMovies.indexOfFirst { it.id == focus.movieId }
+                if (youtubeIndex >= 0) {
+                    1 to youtubeIndex
+                } else {
+                    val otherIndex = otherMovies.indexOfFirst { it.id == focus.movieId }
+                    if (otherIndex >= 0) {
+                        (if (youtubeMovies.isNotEmpty()) 2 else 1) to otherIndex
+                    } else {
+                        null
+                    }
+                }
+            }
+            focus.videoTagName != null -> {
+                0 to tags.indexOfFirst { it.name == focus.videoTagName }.coerceAtLeast(0)
+            }
+            focus.settingsCard -> {
+                (1 + (if (youtubeMovies.isNotEmpty()) 1 else 0) +
+                    (if (otherMovies.isNotEmpty()) 1 else 0)) to 0
+            }
+            else -> null
+        } ?: (0 to 0)
+
+        restoreGridFocus(position.first, position.second)
+    }
+
+    private fun restoreGridFocus(rowPosition: Int, itemPosition: Int) {
+        mHandler.post {
+            if (!isAdded || !homeForeground) return@post
+            setSelectedPosition(rowPosition, false, object : Presenter.ViewHolderTask() {
+                override fun run(viewHolder: Presenter.ViewHolder) {
+                    val gridView = when (viewHolder) {
+                        is ListRowPresenter.ViewHolder -> viewHolder.gridView
+                        else -> viewHolder.view as? HorizontalGridView
+                    }
+                    gridView?.setSelectedPosition(itemPosition)
+                }
+            })
+        }
     }
 
     fun returnToHome(): Boolean {
@@ -268,16 +580,9 @@ class MainFragment : BrowseSupportFragment() {
                 )
             } else if (item is Movie) {
                 Log.d(TAG, "Item: " + item.toString())
-                val intent = Intent(context!!, DetailsActivity::class.java)
+                val intent = Intent(context!!, PlaybackActivity::class.java)
                 intent.putExtra(DetailsActivity.MOVIE, item)
-
-                val bundle = ActivityOptionsCompat.makeSceneTransitionAnimation(
-                    activity!!,
-                    (itemViewHolder.view as ImageCardView).mainImageView!!,
-                    DetailsActivity.SHARED_ELEMENT_NAME
-                )
-                    .toBundle()
-                startActivity(intent, bundle)
+                startActivity(intent)
             } else if (item is VideoTag) {
                 if (item.videoCount > 0) {
                     showTagVideos(item.name)
@@ -301,6 +606,9 @@ class MainFragment : BrowseSupportFragment() {
             rowViewHolder: RowPresenter.ViewHolder, row: Row
         ) {
             hideSearchAffordance()
+            selectedMovieId = (item as? Movie)?.id
+            selectedVideoTagName = (item as? VideoTag)?.name
+            selectedSettingsCard = item is AppSettingsCard
             if (item is Movie) {
                 val selectedTitle = item.title?.takeIf(String::isNotBlank)
                 selectedVideoTitleView?.apply {
@@ -354,6 +662,7 @@ class MainFragment : BrowseSupportFragment() {
     companion object {
         private val TAG = "MainFragment"
         private const val CATALOGUE_REFRESH_REQUEST = 4101
+        private const val MIN_HOME_MAINTENANCE_DELAY_MS = 1_000L
 
         private val BACKGROUND_UPDATE_DELAY = 300
     }
@@ -362,7 +671,8 @@ class MainFragment : BrowseSupportFragment() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == CATALOGUE_REFRESH_REQUEST && resultCode == Activity.RESULT_OK) {
-            loadRows()
+            homeRefreshPolicy.recordManualCatalogueSync(SystemClock.elapsedRealtime())
+            loadRows(preserveFocus = true)
         }
     }
 }

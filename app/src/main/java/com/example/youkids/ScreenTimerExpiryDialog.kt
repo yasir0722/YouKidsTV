@@ -69,7 +69,7 @@ object ScreenTimerExpiryDialog {
         activity: FragmentActivity,
         onTimeSelected: (Int) -> Unit,
     ) {
-        val choices = intArrayOf(5, 10, 15)
+        val choices = intArrayOf(5, 10, 15, 60)
         lateinit var dialog: AlertDialog
         val content = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -77,8 +77,13 @@ object ScreenTimerExpiryDialog {
             addView(messageView(activity, R.string.screen_timer_add_time_message))
         }
         choices.forEach { minutes ->
+            val label = if (minutes == 60) {
+                activity.getString(R.string.screen_timer_one_hour)
+            } else {
+                activity.getString(R.string.screen_timer_minutes, minutes)
+            }
             content.addView(
-                choiceButton(activity, activity.getString(R.string.screen_timer_minutes, minutes)) {
+                choiceButton(activity, label) {
                     dialog.dismiss()
                     onTimeSelected(minutes)
                 },

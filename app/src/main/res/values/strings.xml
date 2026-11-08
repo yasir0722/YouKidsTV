@@ -31,7 +31,7 @@
     <string name="catalogue_load_failed">Could not load videos. Check the backend connection and try again.</string>
     <string name="empty_catalogue">No videos were found in the Telegram link topic.</string>
     <string name="playback_unavailable">Playback is temporarily unavailable.</string>
-    <string name="youtube_controls_hint">Left / right: seek 10 seconds  |  OK: play or pause  |  Down: show controls  |  Up: hide</string>
+    <string name="youtube_controls_hint">Left / right: seek; repeated presses go farther  |  OK: play or pause  |  Down: show controls  |  Up: hide</string>
     <string name="youtube_playback_speed">%1$.2f× speed</string>
     <string name="youtube_status_loading">Loading</string>
     <string name="youtube_status_playing">Playing</string>
@@ -39,6 +39,10 @@
     <string name="youtube_status_buffering">Buffering</string>
     <string name="youtube_status_ended">Ended</string>
     <string name="playback_video_list_title">Choose another video</string>
+    <string name="playback_up_next_title">Up next</string>
+    <string name="playback_autoplay_countdown">Starts in %1$d sec</string>
+    <string name="playback_autoplay_held">Autoplay held — resumes in %1$d sec</string>
+    <string name="playback_autoplay_cancelled">Autoplay cancelled</string>
     <string name="playback_no_other_videos">No other videos are available.</string>
     <string name="app_settings_row">Settings</string>
     <string name="app_update_card_title">App update</string>
@@ -79,10 +83,15 @@
     <string name="youtube_audio_tracks_hint">To switch YouTube audio tracks, open the YouTube player settings menu.</string>
     <string name="app_update_current_version">Installed version %1$s (code %2$d)</string>
     <string name="app_update_check_button">Check for updates</string>
+    <string name="app_update_prompt_title">YouKids update available</string>
+    <string name="app_update_prompt_message">Version %1$s is ready. Would you like to update now?</string>
+    <string name="app_update_prompt_now">Update now</string>
+    <string name="app_update_prompt_later">Later</string>
     <string name="app_refresh_catalogue_button">Sync videos from Telegram</string>
     <string name="app_refresh_catalogue_running">Syncing videos from Telegram...</string>
     <string name="app_refresh_catalogue_completed">Sync complete: %1$d added, %2$d updated, %3$d skipped, %4$d removed.</string>
     <string name="app_refresh_catalogue_error">Video sync failed: %1$s</string>
+    <string name="app_refresh_catalogue_rate_limited">Please wait %1$d seconds before syncing videos again.</string>
     <string name="app_update_checking">Checking Afterlight for updates...</string>
     <string name="app_update_no_release">No YouKids APK has been published in Afterlight yet.</string>
     <string name="app_update_up_to_date">YouKids is up to date.</string>

@@ -2,6 +2,7 @@ package com.example.youkids
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.SystemClock
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.BufferedInputStream
@@ -35,16 +36,37 @@ data class CatalogueSyncResult(
 class AppUpdateRepository(private val context: Context) {
 
     fun refreshCatalogue(): CatalogueSyncResult {
-        val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
-        val connection = trustedApiConnection(URL("$baseUrl/public/videos/refresh"))
+        val now = SystemClock.elapsedRealtime()
+        val waitMs = CATALOGUE_REFRESH_LIMITER.tryStart(now)
+        if (waitMs != null) {
+            throw CatalogueRefreshRateLimitedException(
+                CatalogueRefreshLimiter.retryAfterSeconds(waitMs),
+            )
+        }
+
+        var connection: HttpURLConnection? = null
         try {
-            connection.requestMethod = "POST"
-            connection.setRequestProperty("Accept", "application/json")
-            val statusCode = connection.responseCode
+            val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
+            val activeConnection = trustedApiConnection(URL("$baseUrl/public/videos/refresh"))
+            connection = activeConnection
+            activeConnection.requestMethod = "POST"
+            activeConnection.setRequestProperty("Accept", "application/json")
+            val statusCode = activeConnection.responseCode
+            if (statusCode == HTTP_TOO_MANY_REQUESTS) {
+                val retryAfterSeconds = activeConnection.getHeaderField(RETRY_AFTER_HEADER)
+                    ?.toLongOrNull()
+                    ?.coerceAtLeast(1L)
+                    ?: DEFAULT_RATE_LIMIT_RETRY_SECONDS
+                CATALOGUE_REFRESH_LIMITER.recordRetryAfter(
+                    SystemClock.elapsedRealtime(),
+                    retryAfterSeconds,
+                )
+                throw CatalogueRefreshRateLimitedException(retryAfterSeconds)
+            }
             if (statusCode !in 200..299) {
                 throw IOException("Afterlight catalogue refresh failed ($statusCode).")
             }
-            val body = readSuccessfulResponse(connection)
+            val body = readSuccessfulResponse(activeConnection)
             val result = try {
                 JSONObject(body).getJSONObject("result")
             } catch (exception: JSONException) {
@@ -63,7 +85,8 @@ class AppUpdateRepository(private val context: Context) {
                 throw IOException("Afterlight returned an invalid catalogue refresh result.", exception)
             }
         } finally {
-            connection.disconnect()
+            connection?.disconnect()
+            CATALOGUE_REFRESH_LIMITER.finish()
         }
     }
 
@@ -253,11 +276,15 @@ class AppUpdateRepository(private val context: Context) {
         }
 
     companion object {
+        private val CATALOGUE_REFRESH_LIMITER = CatalogueRefreshLimiter()
         private const val APK_DIRECTORY = "apk-updates"
         private const val CONNECT_TIMEOUT_MS = 10_000
         private const val READ_TIMEOUT_MS = 60_000
         private const val REFRESH_TIMEOUT_MS = 60_000
         private const val MAX_APK_SIZE_BYTES = 100L * 1024 * 1024
+        private const val HTTP_TOO_MANY_REQUESTS = 429
+        private const val RETRY_AFTER_HEADER = "Retry-After"
+        private const val DEFAULT_RATE_LIMIT_RETRY_SECONDS = 60L
         private val SHA256_PATTERN = Regex("[a-fA-F0-9]{64}")
     }
 }

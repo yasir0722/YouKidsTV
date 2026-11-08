@@ -7,6 +7,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.app.AlertDialog
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.text.format.DateFormat
 import android.view.KeyEvent
@@ -29,6 +30,8 @@ import com.bumptech.glide.Glide
 class PlaybackActivity : FragmentActivity() {
     private val controlsHandler = Handler(Looper.getMainLooper())
     private val playbackPreferences by lazy { PlaybackPreferences(applicationContext) }
+    private val youtubeSeekBurst = YouTubeSeekBurst()
+    private val autoplayCountdown = PlaybackAutoplayCountdown()
     private var youtubeWebView: WebView? = null
     private var youtubeControls: View? = null
     private var youtubeProgress: ProgressBar? = null
@@ -37,7 +40,9 @@ class PlaybackActivity : FragmentActivity() {
     private var youtubeStatus: TextView? = null
     private var youtubeIsPlaying = false
     private var youtubePlayerReady = false
-    private var pendingSeekSeconds = 0L
+    private var youtubeSeekCommitRequested = false
+    private var youtubeCurrentTimeSeconds = 0.0
+    private var youtubeDurationSeconds = 0.0
     private var lastPlayerState: Int? = null
     private var screenTimerView: TextView? = null
     private var screenTimerRemainingMillis = 0L
@@ -45,8 +50,16 @@ class PlaybackActivity : FragmentActivity() {
     private var screenTimerRunning = false
     private var playbackPausedForScreenTimer = false
     private var currentMovie: Movie? = null
+    private var currentVideoSuggestions: List<Movie>? = null
     private var controlsShownByDown = false
     private var videoListOverlay: View? = null
+    private var autoplayMovie: Movie? = null
+    private var autoplayCountdownLabel: TextView? = null
+    private var autoplayPreviewPanel: View? = null
+    private var autoplayProgressBar: ProgressBar? = null
+    private var autoplayResumeAtMs: Long? = null
+    private var videoSuggestionsShown = false
+    private var activityResumed = false
 
     private val screenTimerTask = object : Runnable {
         override fun run() {
@@ -61,6 +74,7 @@ class PlaybackActivity : FragmentActivity() {
                 screenTimerRunning = false
                 playbackPreferences.saveScreenTimerRemainingMillis(0L)
                 updateScreenTimerLabel()
+                cancelAutoplayCountdown()
                 pausePlaybackForScreenTimer()
                 showScreenTimerDialog()
             } else {
@@ -73,6 +87,112 @@ class PlaybackActivity : FragmentActivity() {
     private val hideControlsTask = Runnable {
         youtubeControls?.visibility = View.GONE
         controlsShownByDown = false
+    }
+
+    private val commitYoutubeSeekTask = object : Runnable {
+        override fun run() {
+            if (!youtubeSeekBurst.hasPendingPresses) return
+
+            val delayMs = youtubeSeekBurst.millisecondsUntilCommit(SystemClock.elapsedRealtime())
+            if (delayMs > 0L) {
+                controlsHandler.postDelayed(this, delayMs)
+                return
+            }
+
+            youtubeSeekCommitRequested = true
+            commitPendingYoutubeSeekIfReady()
+        }
+    }
+
+    private val autoplayProgressTask = object : Runnable {
+        override fun run() {
+            if (!autoplayCountdown.isRunning) return
+
+            val now = SystemClock.elapsedRealtime()
+            updateAutoplayProgress(now)
+            if (!autoplayCountdown.isDue(now)) {
+                controlsHandler.postDelayed(this, AUTOPLAY_PROGRESS_TICK_MS)
+            }
+        }
+    }
+
+    private val autoplayCountdownTask = object : Runnable {
+        override fun run() {
+            val movie = autoplayMovie ?: return
+            if (!autoplayCountdown.isRunning) return
+            if (!activityResumed ||
+                isFinishing ||
+                isDestroyed ||
+                playbackPausedForScreenTimer ||
+                !hasRemainingScreenTime()
+            ) {
+                cancelAutoplayCountdown()
+                return
+            }
+
+            val now = SystemClock.elapsedRealtime()
+            updateAutoplayProgress(now)
+            val secondsRemaining = autoplayCountdown.secondsRemaining(now) ?: return
+            autoplayCountdownLabel?.text =
+                getString(R.string.playback_autoplay_countdown, secondsRemaining)
+
+            if (autoplayCountdown.completeIfDue(now)) {
+                autoplayMovie = null
+                controlsHandler.removeCallbacks(autoplayProgressTask)
+                playSuggestedVideo(movie)
+                return
+            }
+
+            controlsHandler.postDelayed(this, AUTOPLAY_COUNTDOWN_TICK_MS)
+        }
+    }
+
+    private val resumeAutoplayTask = object : Runnable {
+        override fun run() {
+            if (!autoplayCountdown.isActive ||
+                autoplayCountdown.isRunning ||
+                autoplayMovie == null
+            ) {
+                autoplayResumeAtMs = null
+                return
+            }
+            if (!activityResumed ||
+                isFinishing ||
+                isDestroyed ||
+                playbackPausedForScreenTimer ||
+                !hasRemainingScreenTime()
+            ) {
+                cancelAutoplayCountdown()
+                return
+            }
+
+            val now = SystemClock.elapsedRealtime()
+            val resumeAt = autoplayResumeAtMs ?: return
+            val delayMs = (resumeAt - now).coerceAtLeast(0L)
+            if (delayMs > 0L) {
+                val seconds = ((delayMs + MILLIS_PER_SECOND - 1) / MILLIS_PER_SECOND).toInt()
+                autoplayCountdownLabel?.text =
+                    getString(R.string.playback_autoplay_held, seconds)
+                controlsHandler.postDelayed(this, minOf(AUTOPLAY_COUNTDOWN_TICK_MS, delayMs))
+                return
+            }
+
+            autoplayResumeAtMs = null
+            if (autoplayCountdown.resume(now)) {
+                val remainingMs = autoplayCountdown.millisecondsRemaining(now) ?: 0L
+                val seconds = autoplayCountdown.secondsRemaining(now) ?: 0
+                updateAutoplayProgress(now)
+                autoplayCountdownLabel?.text =
+                    getString(R.string.playback_autoplay_countdown, seconds)
+                controlsHandler.removeCallbacks(autoplayCountdownTask)
+                controlsHandler.removeCallbacks(autoplayProgressTask)
+                controlsHandler.postDelayed(
+                    autoplayCountdownTask,
+                    minOf(AUTOPLAY_COUNTDOWN_TICK_MS, remainingMs),
+                )
+                controlsHandler.postDelayed(autoplayProgressTask, AUTOPLAY_PROGRESS_TICK_MS)
+            }
+        }
     }
 
     private val updatePlayerStatusTask = object : Runnable {
@@ -109,6 +229,8 @@ class PlaybackActivity : FragmentActivity() {
     }
 
     override fun onPause() {
+        activityResumed = false
+        cancelAutoplayCountdown()
         controlsHandler.removeCallbacks(updatePlayerStatusTask)
         controlsHandler.removeCallbacks(hideControlsTask)
         pauseScreenTimer()
@@ -118,6 +240,7 @@ class PlaybackActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        activityResumed = true
         resumeScreenTimer()
         youtubeWebView?.onResume()
         if (youtubeWebView != null) {
@@ -129,7 +252,20 @@ class PlaybackActivity : FragmentActivity() {
     override fun onDestroy() {
         controlsHandler.removeCallbacks(updatePlayerStatusTask)
         controlsHandler.removeCallbacks(hideControlsTask)
+        controlsHandler.removeCallbacks(commitYoutubeSeekTask)
+        controlsHandler.removeCallbacks(autoplayCountdownTask)
+        controlsHandler.removeCallbacks(autoplayProgressTask)
+        controlsHandler.removeCallbacks(resumeAutoplayTask)
         controlsHandler.removeCallbacks(screenTimerTask)
+        youtubeSeekBurst.reset()
+        youtubeSeekCommitRequested = false
+        autoplayCountdown.cancel()
+        autoplayMovie = null
+        autoplayCountdownLabel = null
+        autoplayPreviewPanel = null
+        autoplayProgressBar = null
+        autoplayProgressBar = null
+        autoplayResumeAtMs = null
         videoListOverlay = null
         youtubeWebView?.apply {
             stopLoading()
@@ -141,8 +277,14 @@ class PlaybackActivity : FragmentActivity() {
         super.onDestroy()
     }
 
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        holdAutoplayCountdown()
+    }
+
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
+        settlePendingYoutubeSeek()
         if (videoListOverlay != null) {
             hideVideoList()
             return
@@ -156,6 +298,9 @@ class PlaybackActivity : FragmentActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            holdAutoplayCountdown()
+        }
         if (videoListOverlay != null) return super.dispatchKeyEvent(event)
         if (handleYoutubeRemoteKey(event.keyCode, event)) return true
         return super.dispatchKeyEvent(event)
@@ -314,6 +459,10 @@ class PlaybackActivity : FragmentActivity() {
     private fun handleYoutubeRemoteKey(keyCode: Int, event: KeyEvent): Boolean {
         if (youtubeWebView == null) return false
 
+        if (event.action == KeyEvent.ACTION_DOWN && !isYoutubeSeekKey(keyCode)) {
+            settlePendingYoutubeSeek()
+        }
+
         if (event.action == KeyEvent.ACTION_DOWN) {
             when (keyCode) {
                 KeyEvent.KEYCODE_DPAD_CENTER,
@@ -333,12 +482,12 @@ class PlaybackActivity : FragmentActivity() {
                 }
                 KeyEvent.KEYCODE_DPAD_LEFT,
                 KeyEvent.KEYCODE_MEDIA_REWIND -> {
-                    if (event.repeatCount == 0) seekYoutubeBy(-SEEK_SECONDS)
+                    seekYoutubeBy(-1)
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT,
                 KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
-                    if (event.repeatCount == 0) seekYoutubeBy(SEEK_SECONDS)
+                    seekYoutubeBy(1)
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_UP -> {
@@ -363,6 +512,12 @@ class PlaybackActivity : FragmentActivity() {
 
         return false
     }
+
+    private fun isYoutubeSeekKey(keyCode: Int): Boolean =
+        keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+            keyCode == KeyEvent.KEYCODE_MEDIA_REWIND ||
+            keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
+            keyCode == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD
 
     private fun isYoutubeControlKey(keyCode: Int): Boolean =
         when (keyCode) {
@@ -406,14 +561,50 @@ class PlaybackActivity : FragmentActivity() {
         youtubeWebView?.evaluateJavascript("window.player && window.player.pauseVideo()", null)
     }
 
-    private fun seekYoutubeBy(seconds: Long) {
+    private fun seekYoutubeBy(direction: Int) {
         showYoutubeControls()
-        if (!youtubePlayerReady) {
-            pendingSeekSeconds += seconds
-            return
+        val nowMs = SystemClock.elapsedRealtime()
+        if (youtubeSeekBurst.isReadyToCommit(nowMs)) {
+            youtubeSeekCommitRequested = true
+            commitPendingYoutubeSeekIfReady()
         }
+        youtubeSeekCommitRequested = false
+        youtubeSeekBurst.recordPress(direction, nowMs)
+        controlsHandler.removeCallbacks(commitYoutubeSeekTask)
+        controlsHandler.postDelayed(commitYoutubeSeekTask, SEEK_BURST_DEBOUNCE_MS)
+        updateYoutubeSeekDisplay()
+    }
 
-        performYoutubeSeek(seconds)
+    private fun settlePendingYoutubeSeek() {
+        if (!youtubeSeekBurst.hasPendingPresses) return
+        controlsHandler.removeCallbacks(commitYoutubeSeekTask)
+        youtubeSeekCommitRequested = true
+        commitPendingYoutubeSeekIfReady()
+    }
+
+    private fun commitPendingYoutubeSeekIfReady() {
+        if (!youtubeSeekCommitRequested || !youtubeSeekBurst.hasPendingPresses) return
+        if (!youtubePlayerReady) return
+
+        val offsetSeconds = youtubeSeekBurst.consumeOffset() ?: return
+        youtubeSeekCommitRequested = false
+        if (offsetSeconds != 0L) {
+            performYoutubeSeek(offsetSeconds)
+        }
+    }
+
+    private fun updateYoutubeSeekDisplay() {
+        if (!youtubePlayerReady || youtubeDurationSeconds <= 0.0) return
+
+        val targetTime = youtubeSeekBurst.previewTarget(
+            youtubeCurrentTimeSeconds,
+            youtubeDurationSeconds,
+        )
+        youtubeTime?.text =
+            "${formatPlaybackTime(targetTime)} / ${formatPlaybackTime(youtubeDurationSeconds)}"
+        youtubeProgress?.progress = ((targetTime / youtubeDurationSeconds) * PROGRESS_MAX)
+            .toInt()
+            .coerceIn(0, PROGRESS_MAX)
     }
 
     private fun performYoutubeSeek(seconds: Long) {
@@ -429,6 +620,7 @@ class PlaybackActivity : FragmentActivity() {
     }
 
     private fun updateYoutubePlaybackStatus(result: String?) {
+        if (isFinishing || isDestroyed) return
         val values = result
             ?.removeSurrounding("\"")
             ?.split('|')
@@ -436,8 +628,12 @@ class PlaybackActivity : FragmentActivity() {
         if (values.size != STATUS_VALUE_COUNT) return
 
         val state = values[0].toIntOrNull() ?: return
-        val currentTime = values[1].toDoubleOrNull() ?: 0.0
-        val duration = values[2].toDoubleOrNull() ?: 0.0
+        val currentTime = values[1].toDoubleOrNull()
+            ?.takeIf { it.isFinite() }
+            ?: 0.0
+        val duration = values[2].toDoubleOrNull()
+            ?.takeIf { it.isFinite() }
+            ?: 0.0
         values[3].toFloatOrNull()?.let(::updateYoutubeSpeedLabel)
         val previousState = lastPlayerState
         lastPlayerState = state
@@ -453,16 +649,19 @@ class PlaybackActivity : FragmentActivity() {
 
         if (duration > 0.0) {
             youtubePlayerReady = true
-            youtubeTime?.text = "${formatPlaybackTime(currentTime)} / ${formatPlaybackTime(duration)}"
-            youtubeProgress?.progress = ((currentTime / duration) * PROGRESS_MAX)
+            youtubeCurrentTimeSeconds = currentTime.coerceAtLeast(0.0)
+            youtubeDurationSeconds = duration
+            val displayedTime = if (youtubeSeekBurst.hasPendingPresses) {
+                youtubeSeekBurst.previewTarget(currentTime, duration)
+            } else {
+                currentTime
+            }
+            youtubeTime?.text =
+                "${formatPlaybackTime(displayedTime)} / ${formatPlaybackTime(duration)}"
+            youtubeProgress?.progress = ((displayedTime / duration) * PROGRESS_MAX)
                 .toInt()
                 .coerceIn(0, PROGRESS_MAX)
-
-            if (pendingSeekSeconds != 0L) {
-                val pendingSeek = pendingSeekSeconds
-                pendingSeekSeconds = 0
-                performYoutubeSeek(pendingSeek)
-            }
+            commitPendingYoutubeSeekIfReady()
         }
 
         if (previousState != state) {
@@ -502,13 +701,27 @@ class PlaybackActivity : FragmentActivity() {
     }
 
     internal fun showVideoSuggestions() {
-        if (videoListOverlay != null) return
-        showVideoList()
+        if (videoSuggestionsShown || isFinishing || isDestroyed) return
+        videoSuggestionsShown = true
+        if (videoListOverlay == null) showVideoList()
+
+        val suggestions = videoSuggestionsForCurrentMovie()
+        val nextMovie = firstPlayableSuggestion(currentMovie, suggestions) ?: return
+        if (videoListOverlay == null ||
+            playbackPausedForScreenTimer ||
+            !hasRemainingScreenTime() ||
+            !activityResumed
+        ) {
+            return
+        }
+
+        addUpNextPreview(nextMovie)
+        startAutoplayCountdown(nextMovie)
     }
 
     private fun showVideoList() {
-        val currentId = currentMovie?.id
-        val otherMovies = MovieList.list.filterNot { it.id == currentId }
+        if (videoListOverlay != null) return
+        val otherMovies = videoSuggestionsForCurrentMovie()
         if (otherMovies.isEmpty()) {
             Toast.makeText(this, R.string.playback_no_other_videos, Toast.LENGTH_SHORT).show()
             return
@@ -519,12 +732,23 @@ class PlaybackActivity : FragmentActivity() {
             setBackgroundColor(getColor(R.color.playback_controls_background))
             setPadding(dp(18), dp(12), dp(18), dp(12))
         }
-        overlay.addView(TextView(this).apply {
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(TextView(this).apply {
             setText(R.string.playback_video_list_title)
             setTextColor(Color.WHITE)
             textSize = 18f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
-        })
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        overlay.addView(
+            header,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
         val cards = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
         }
@@ -543,11 +767,7 @@ class PlaybackActivity : FragmentActivity() {
                     )
                 }
                 setOnClickListener {
-                    startActivity(
-                        Intent(this@PlaybackActivity, PlaybackActivity::class.java)
-                            .putExtra(DetailsActivity.MOVIE, movie),
-                    )
-                    finish()
+                    playSuggestedVideo(movie)
                 }
             }
             val image = ImageView(this).apply {
@@ -595,9 +815,192 @@ class PlaybackActivity : FragmentActivity() {
         cards.getChildAt(0)?.requestFocus()
     }
 
+    private fun videoSuggestionsForCurrentMovie(): List<Movie> =
+        currentVideoSuggestions
+            ?: shuffledVideoSuggestions(currentMovie, MovieList.list)
+                .also { currentVideoSuggestions = it }
+
+    private fun addUpNextPreview(movie: Movie) {
+        val overlay = videoListOverlay as? LinearLayout ?: return
+        if (autoplayPreviewPanel != null) return
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(6), dp(8), dp(6))
+            setBackgroundColor(getColor(R.color.default_background))
+        }
+        val preview = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            isClickable = true
+            setOnClickListener { playSuggestedVideo(movie) }
+        }
+        val image = ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(92), dp(52)).apply {
+                marginEnd = dp(8)
+            }
+            scaleType = ImageView.ScaleType.CENTER_CROP
+        }
+        Glide.with(this)
+            .load(movie.cardImageUrl)
+            .placeholder(R.drawable.movie)
+            .error(R.drawable.movie)
+            .into(image)
+        preview.addView(image)
+
+        val details = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        details.addView(TextView(this).apply {
+            setText(R.string.playback_up_next_title)
+            setTextColor(Color.WHITE)
+            textSize = 12f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        })
+        details.addView(TextView(this).apply {
+            text = movie.title.orEmpty().ifBlank { getString(R.string.movie) }
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            layoutParams = LinearLayout.LayoutParams(dp(190), LinearLayout.LayoutParams.WRAP_CONTENT)
+        })
+        autoplayCountdownLabel = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            textSize = 12f
+            text = getString(
+                R.string.playback_autoplay_countdown,
+                PlaybackAutoplayCountdown.DEFAULT_DURATION_MS / MILLIS_PER_SECOND,
+            )
+        }
+        details.addView(autoplayCountdownLabel)
+        preview.addView(details)
+        container.addView(
+            preview,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(60),
+            ),
+        )
+
+        autoplayProgressBar = ProgressBar(
+            this,
+            null,
+            android.R.attr.progressBarStyleHorizontal,
+        ).apply {
+            max = AUTOPLAY_PROGRESS_MAX
+            progress = 0
+            isIndeterminate = false
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            progressTintList =
+                ColorStateList.valueOf(getColor(R.color.autoplay_progress_fill))
+            progressBackgroundTintList =
+                ColorStateList.valueOf(getColor(R.color.autoplay_progress_track))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(4),
+            ).apply {
+                topMargin = dp(4)
+            }
+        }
+        container.addView(autoplayProgressBar)
+
+        overlay.addView(
+            container,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = dp(10)
+            },
+        )
+        autoplayPreviewPanel = container
+    }
+
+    private fun startAutoplayCountdown(movie: Movie) {
+        if (!activityResumed ||
+            isFinishing ||
+            isDestroyed ||
+            playbackPausedForScreenTimer ||
+            !hasRemainingScreenTime() ||
+            !autoplayCountdown.start(SystemClock.elapsedRealtime())
+        ) {
+            return
+        }
+
+        autoplayMovie = movie
+        autoplayCountdownLabel?.text = getString(
+            R.string.playback_autoplay_countdown,
+            PlaybackAutoplayCountdown.DEFAULT_DURATION_MS / MILLIS_PER_SECOND,
+        )
+        autoplayResumeAtMs = null
+        updateAutoplayProgress(SystemClock.elapsedRealtime())
+        controlsHandler.removeCallbacks(autoplayCountdownTask)
+        controlsHandler.removeCallbacks(autoplayProgressTask)
+        controlsHandler.removeCallbacks(resumeAutoplayTask)
+        controlsHandler.postDelayed(autoplayCountdownTask, AUTOPLAY_COUNTDOWN_TICK_MS)
+        controlsHandler.postDelayed(autoplayProgressTask, AUTOPLAY_PROGRESS_TICK_MS)
+    }
+
+    private fun holdAutoplayCountdown() {
+        if (!autoplayCountdown.isActive || autoplayMovie == null) return
+
+        val now = SystemClock.elapsedRealtime()
+        if (autoplayCountdown.isRunning) autoplayCountdown.pause(now)
+        updateAutoplayProgress(now)
+        autoplayResumeAtMs = now + AUTOPLAY_RESUME_IDLE_MS
+        controlsHandler.removeCallbacks(autoplayCountdownTask)
+        controlsHandler.removeCallbacks(autoplayProgressTask)
+        controlsHandler.removeCallbacks(resumeAutoplayTask)
+        autoplayCountdownLabel?.text = getString(
+            R.string.playback_autoplay_held,
+            AUTOPLAY_RESUME_IDLE_MS / MILLIS_PER_SECOND,
+        )
+        controlsHandler.postDelayed(resumeAutoplayTask, AUTOPLAY_HOLD_TICK_MS)
+    }
+
+    private fun updateAutoplayProgress(nowMs: Long) {
+        autoplayProgressBar?.progress =
+            (autoplayCountdown.progressFraction(nowMs) * AUTOPLAY_PROGRESS_MAX)
+                .toInt()
+                .coerceIn(0, AUTOPLAY_PROGRESS_MAX)
+    }
+
+    private fun hasRemainingScreenTime(): Boolean {
+        if (screenTimerRemainingMillis <= 0L) return false
+        if (!screenTimerRunning) return true
+
+        val elapsed = SystemClock.elapsedRealtime() - screenTimerLastTick
+        return screenTimerRemainingMillis - elapsed > 0L
+    }
+
+    private fun cancelAutoplayCountdown() {
+        if (!autoplayCountdown.cancel()) return
+        controlsHandler.removeCallbacks(autoplayCountdownTask)
+        controlsHandler.removeCallbacks(autoplayProgressTask)
+        controlsHandler.removeCallbacks(resumeAutoplayTask)
+        autoplayMovie = null
+        autoplayResumeAtMs = null
+        autoplayCountdownLabel?.setText(R.string.playback_autoplay_cancelled)
+    }
+
+    private fun playSuggestedVideo(movie: Movie) {
+        cancelAutoplayCountdown()
+        if (isFinishing || isDestroyed) return
+        startActivity(
+            Intent(this, PlaybackActivity::class.java)
+                .putExtra(DetailsActivity.MOVIE, movie),
+        )
+        finish()
+    }
+
     private fun hideVideoList() {
+        cancelAutoplayCountdown()
         videoListOverlay?.let { (it.parent as? ViewGroup)?.removeView(it) }
         videoListOverlay = null
+        autoplayCountdownLabel = null
+        autoplayPreviewPanel = null
+        autoplayProgressBar = null
     }
 
     private fun dp(value: Int): Int =
@@ -687,10 +1090,15 @@ class PlaybackActivity : FragmentActivity() {
         private const val YOUTUBE_PROVIDER = "youtube"
         private const val PLAYER_STATUS_INTERVAL_MS = 500L
         private const val CONTROLS_HIDE_DELAY_MS = 5_000L
+        private const val AUTOPLAY_COUNTDOWN_TICK_MS = 1_000L
+        private const val AUTOPLAY_PROGRESS_TICK_MS = 100L
+        private const val AUTOPLAY_RESUME_IDLE_MS = 5_000L
+        private const val AUTOPLAY_HOLD_TICK_MS = 1_000L
+        private const val AUTOPLAY_PROGRESS_MAX = 1_000
+        private const val SEEK_BURST_DEBOUNCE_MS = YouTubeSeekBurst.DEBOUNCE_MS
         private const val SCREEN_TIMER_TICK_MS = 1_000L
         private const val MILLIS_PER_SECOND = 1_000L
         private const val MILLIS_PER_MINUTE = 60_000L
-        private const val SEEK_SECONDS = 10L
         private const val SECONDS_PER_MINUTE = 60L
         private const val SECONDS_PER_HOUR = 3_600L
         private const val PROGRESS_MAX = 1_000

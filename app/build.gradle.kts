@@ -16,8 +16,8 @@ android {
         applicationId = "com.example.youkids"
         minSdk = 23
         targetSdk = 37
-        versionCode = 23
-        versionName = "2.12"
+        versionCode = 27
+        versionName = "2.16"
         buildConfigField("String", "API_BASE_URL", "\"$youkidsApiBaseUrl\"")
     }
 
@@ -29,7 +29,7 @@ android {
         release {
             optimization {
                 enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
+                packageScope = setOf("androidx.**")
             }
         }
     }

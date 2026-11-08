@@ -36,9 +36,12 @@ class AppUpdateActivity : FragmentActivity() {
     private var availableRelease: AppReleaseInfo? = null
     private var downloadedApk: File? = null
     private var awaitingInstallPermission = false
+    private var autoDownloadAvailableUpdate = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        autoDownloadAvailableUpdate =
+            intent.getBooleanExtra(EXTRA_AUTO_DOWNLOAD_UPDATE, false)
         setContentView(R.layout.activity_app_update)
         screenTimerOverlay = ScreenTimerOverlay(this).also(ScreenTimerOverlay::attach)
 
@@ -113,6 +116,9 @@ class AppUpdateActivity : FragmentActivity() {
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     setBusy(false)
+                    val shouldDownload = autoDownloadAvailableUpdate &&
+                        release?.versionCode?.let { it > BuildConfig.VERSION_CODE } == true
+                    autoDownloadAvailableUpdate = false
                     availableRelease = release
                     when {
                         release == null -> {
@@ -131,7 +137,11 @@ class AppUpdateActivity : FragmentActivity() {
                             )
                             installButton.setText(R.string.app_update_download_install)
                             installButton.visibility = View.VISIBLE
-                            installButton.requestFocus()
+                            if (shouldDownload) {
+                                downloadAndInstall()
+                            } else {
+                                installButton.requestFocus()
+                            }
                         }
                     }
                 }
@@ -140,6 +150,7 @@ class AppUpdateActivity : FragmentActivity() {
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     setBusy(false)
+                    autoDownloadAvailableUpdate = false
                     statusText.text = getString(
                         R.string.app_update_error,
                         exception.message ?: getString(R.string.app_update_unknown_error),
@@ -206,6 +217,19 @@ class AppUpdateActivity : FragmentActivity() {
                         setResult(RESULT_OK)
                         finish()
                     }, REFRESH_RESULT_DISPLAY_MS)
+                }
+            } catch (exception: CatalogueRefreshRateLimitedException) {
+                android.util.Log.i(
+                    TAG,
+                    "Catalogue refresh is rate-limited for ${exception.retryAfterSeconds} seconds",
+                )
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    setBusy(false)
+                    statusText.text = getString(
+                        R.string.app_refresh_catalogue_rate_limited,
+                        exception.retryAfterSeconds,
+                    )
                 }
             } catch (exception: IOException) {
                 android.util.Log.e(TAG, "Unable to refresh the video catalogue", exception)
@@ -395,6 +419,8 @@ class AppUpdateActivity : FragmentActivity() {
     }
 
     companion object {
+        const val EXTRA_AUTO_DOWNLOAD_UPDATE =
+            "com.example.youkids.extra.AUTO_DOWNLOAD_UPDATE"
         private const val TAG = "AppUpdateActivity"
         private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
         private const val REFRESH_RESULT_DISPLAY_MS = 2_500L

@@ -7,4 +7,6 @@
     <color name="selected_title_background">#E611080A</color>
     <color name="playback_controls_background">#E611080A</color>
     <color name="default_background">#21151A</color>
+    <color name="autoplay_progress_track">#FF707070</color>
+    <color name="autoplay_progress_fill">#FFE2787E</color>
 </resources>

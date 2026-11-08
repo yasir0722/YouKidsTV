@@ -126,7 +126,7 @@ private class YouTubeGridCardPresenter : Presenter() {
         card.setOnClickListener {
             val movie = card.tag as? Movie ?: return@setOnClickListener
             context.startActivity(
-                Intent(context, DetailsActivity::class.java)
+                Intent(context, PlaybackActivity::class.java)
                     .putExtra(DetailsActivity.MOVIE, movie),
             )
         }
