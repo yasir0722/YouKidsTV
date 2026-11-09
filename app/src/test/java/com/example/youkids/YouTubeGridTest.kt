@@ -5,19 +5,20 @@ import org.junit.Test
 
 class YouTubeGridTest {
     @Test
-    fun gridUsesAtMostThreeRowsAndPreservesEdgeVideos() {
+    fun gridUsesAtMostFourRowsAndPreservesEdgeVideos() {
         val movies = (1L..10L).map { Movie(id = it) }
 
         val rows = YouTubeGrid(movies).rows
 
-        assertEquals(3, rows.size)
-        assertEquals(listOf(1L, 2L, 3L, 4L), rows.first().map(Movie::id))
-        assertEquals(listOf(9L, 10L), rows.last().map(Movie::id))
+        assertEquals(4, rows.size)
+        assertEquals(listOf(1L, 2L, 3L), rows.first().map(Movie::id))
+        assertEquals(listOf(10L), rows.last().map(Movie::id))
+        assertEquals(listOf(3, 3, 3, 1), rows.map { it.size })
         assertEquals(movies, rows.flatten())
     }
 
     @Test
-    fun gridUsesOneRowPerVideoWhenThereAreFewerThanThreeVideos() {
+    fun gridUsesOneRowPerVideoWhenThereAreFewerThanFourVideos() {
         val movies = listOf(Movie(id = 1), Movie(id = 2))
 
         val rows = YouTubeGrid(movies).rows

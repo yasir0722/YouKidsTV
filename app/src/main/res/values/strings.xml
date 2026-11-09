@@ -3,11 +3,11 @@
     <string name="home_screen_channel_name">YouKids videos</string>
     <string name="browse_title">YouKids</string>
     <string name="related_movies">Related Videos</string>
-    <string name="videos_row">Explore all videos</string>
+    <string name="videos_row">Filter by tag</string>
     <string name="youtube_row">Watch on YouTube</string>
     <string name="tagged_videos_row">Videos: %1$s</string>
     <string name="no_video_tags">No tags yet</string>
-    <string name="no_video_tags_hint">Add title = Bing to a Telegram post and sync</string>
+    <string name="no_video_tags_hint">Assign tags in Afterlight, then refresh the catalogue</string>
     <plurals name="tag_video_count">
         <item quantity="one">%1$d video</item>
         <item quantity="other">%1$d videos</item>

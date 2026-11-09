@@ -429,11 +429,20 @@ class MainFragment : BrowseSupportFragment() {
 
         val otherMovies = movies.filterNot(::isYouTubeVideo)
         if (otherMovies.isNotEmpty()) {
-            addMovieRow(rowsAdapter, 2, getString(R.string.other_videos_row), otherMovies)
+            addMovieRow(
+                rowsAdapter,
+                if (youtubeMovies.isNotEmpty()) 2 else 1,
+                getString(R.string.other_videos_row),
+                otherMovies,
+            )
         }
         addAppSettingsRow(rowsAdapter)
         adapter = rowsAdapter
-        focusToRestore?.let { restoreHomeFocus(movies, it) }
+        if (focusToRestore != null) {
+            restoreHomeFocus(movies, focusToRestore)
+        } else if (youtubeMovies.isNotEmpty()) {
+            restoreGridFocus(1, 0)
+        }
     }
 
     private fun showTagVideos(

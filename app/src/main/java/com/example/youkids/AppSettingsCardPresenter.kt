@@ -2,6 +2,7 @@ package com.example.youkids
 
 import android.graphics.drawable.Drawable
 import android.view.ViewGroup
+import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.leanback.widget.ImageCardView
 import androidx.leanback.widget.Presenter
@@ -33,6 +34,16 @@ class AppSettingsCardPresenter : Presenter() {
         card.isFocusable = true
         card.isFocusableInTouchMode = true
         card.setMainImageDimensions(CARD_WIDTH, CARD_HEIGHT)
+        requireNotNull(card.findViewById<TextView>(androidx.leanback.R.id.title_text)).apply {
+            setSingleLine(false)
+            maxLines = 2
+            textSize = TITLE_TEXT_SIZE_SP
+        }
+        requireNotNull(card.findViewById<TextView>(androidx.leanback.R.id.content_text)).apply {
+            setSingleLine(false)
+            maxLines = 2
+            textSize = DESCRIPTION_TEXT_SIZE_SP
+        }
         updateBackground(card, false)
         return ViewHolder(card)
     }
@@ -60,7 +71,9 @@ class AppSettingsCardPresenter : Presenter() {
     }
 
     private companion object {
-        const val CARD_WIDTH = 313
-        const val CARD_HEIGHT = 176
+        const val CARD_WIDTH = 360
+        const val CARD_HEIGHT = 203
+        const val TITLE_TEXT_SIZE_SP = 20f
+        const val DESCRIPTION_TEXT_SIZE_SP = 16f
     }
 }

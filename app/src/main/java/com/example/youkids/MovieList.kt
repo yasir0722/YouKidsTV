@@ -23,7 +23,10 @@ object MovieList {
             .flatten()
             .groupBy { it.lowercase(Locale.ROOT) }
             .map { (_, tags) -> VideoTag(tags.first(), tags.size) }
-            .sortedBy { it.name.lowercase(Locale.ROOT) }
+            .sortedWith(
+                compareBy<VideoTag> { tagPriority(it.name) }
+                    .thenBy { it.name.lowercase(Locale.ROOT) },
+            )
 
     fun videosForTag(movies: List<Movie>, tag: String): List<Movie> =
         movies.filter { movie ->
@@ -36,4 +39,13 @@ object MovieList {
             ?.map { it.trim() }
             ?.filter(String::isNotEmpty)
             .orEmpty()
+
+    private fun tagPriority(tag: String): Int =
+        when (tag.lowercase(Locale.ROOT)) {
+            "pasti" -> 0
+            "documentary" -> 1
+            "cartoon" -> 2
+            "game", "games" -> 3
+            else -> 4
+        }
 }

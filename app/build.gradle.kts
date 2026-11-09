@@ -16,8 +16,8 @@ android {
         applicationId = "com.example.youkids"
         minSdk = 23
         targetSdk = 37
-        versionCode = 27
-        versionName = "2.16"
+        versionCode = 28
+        versionName = "2.17"
         buildConfigField("String", "API_BASE_URL", "\"$youkidsApiBaseUrl\"")
     }
 
@@ -27,6 +27,7 @@ android {
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("debug")
             optimization {
                 enable = true
                 packageScope = setOf("androidx.**")

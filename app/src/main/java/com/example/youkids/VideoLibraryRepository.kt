@@ -49,7 +49,9 @@ class VideoLibraryRepository {
         connection.connectTimeout = CONNECT_TIMEOUT_MS
         connection.readTimeout = READ_TIMEOUT_MS
         connection.requestMethod = "GET"
+        connection.useCaches = false
         connection.setRequestProperty("Accept", "application/json")
+        connection.setRequestProperty("Cache-Control", "no-cache")
 
         try {
             val statusCode = connection.responseCode

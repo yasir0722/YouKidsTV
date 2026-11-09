@@ -34,7 +34,7 @@ data class YouTubeGrid(val movies: List<Movie>) {
         }
 
     companion object {
-        private const val MAX_ROWS = 3
+        private const val MAX_ROWS = 4
     }
 }
 
@@ -53,7 +53,12 @@ class YouTubeGridRowPresenter : RowPresenter() {
                 setItemAlignmentOffsetPercent(0f)
                 clipChildren = false
                 clipToPadding = false
-                setPadding(EDGE_PADDING.dp(context), 0, EDGE_PADDING.dp(context), 0)
+                setPadding(
+                    EDGE_PADDING.dp(context),
+                    VERTICAL_PADDING.dp(context),
+                    EDGE_PADDING.dp(context),
+                    VERTICAL_PADDING.dp(context),
+                )
             },
         )
 
@@ -73,11 +78,12 @@ class YouTubeGridRowPresenter : RowPresenter() {
     }
 
     private companion object {
-        const val MAX_ROWS = 3
+        const val MAX_ROWS = 4
         const val CARD_GAP = 8
-        const val ROW_GAP = 8
+        const val ROW_GAP = 4
         const val EDGE_PADDING = 24
-        const val GRID_HEIGHT = 328
+        const val VERTICAL_PADDING = 4
+        const val GRID_HEIGHT = 436
     }
 }
 

@@ -57,4 +57,22 @@ class MovieListTest {
         )
         assertEquals(listOf(movies[0], movies[1]), MovieList.videosForTag(movies, "BING"))
     }
+
+    @Test
+    fun tagsUsePreferredTypeOrderThenAlphabeticalOrderForTheRest() {
+        val movies = listOf(
+            Movie(id = 1, tag = "Song"),
+            Movie(id = 2, tag = "Games"),
+            Movie(id = 3, tag = "Cartoon"),
+            Movie(id = 4, tag = "Documentary"),
+            Movie(id = 5, tag = "Pasti"),
+            Movie(id = 6, tag = "Movie"),
+            Movie(id = 7, tag = "Game"),
+        )
+
+        assertEquals(
+            listOf("Pasti", "Documentary", "Cartoon", "Game", "Games", "Movie", "Song"),
+            MovieList.tagsFor(movies).map(VideoTag::name),
+        )
+    }
 }
